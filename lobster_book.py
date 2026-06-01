@@ -104,15 +104,64 @@ PLAZA_BOOKS = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+DEFAULT_SOUL = (
+    "你是一位资深专业作家，文字功底深厚，逻辑严密，擅长把复杂知识讲得深入浅出。"
+    "你写的书结构清晰、观点鲜明、案例丰富，读者读完后有明显的收获感。"
+    "用中文写作，语言流畅自然，避免堆砌辞藻。"
+)
+
+DEFAULT_SKILLS = [
+    {"id":1, "name":"故事驱动",   "enabled":False,
+     "prompt":"每章以一个真实故事或案例开头，用叙事方式引入核心观点，增强代入感。"},
+    {"id":2, "name":"数据支撑",   "enabled":False,
+     "prompt":"关键论点必须引用具体数据、研究报告或权威来源，增强说服力和可信度。"},
+    {"id":3, "name":"行动导向",   "enabled":True,
+     "prompt":"每章结尾提供3-5条可立即执行的行动清单，让读者知道下一步怎么做。"},
+    {"id":4, "name":"悬念钩子",   "enabled":False,
+     "prompt":"每章结尾设置悬念或留下问题，驱动读者继续阅读下一章。"},
+    {"id":5, "name":"类比教学",   "enabled":False,
+     "prompt":"用生动的比喻和类比解释抽象概念，让零基础读者也能快速理解。"},
+    {"id":6, "name":"批判视角",   "enabled":False,
+     "prompt":"主动呈现反对观点和潜在风险，体现客观性，避免一味正面论述。"},
+    {"id":7, "name":"金句提炼",   "enabled":True,
+     "prompt":"每章提炼2-3句核心金句，用加粗或独立段落标注，方便读者摘录。"},
+]
+
 def load_data():
+    defaults = {
+        "api_key": "", "base_url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat", "tasks": [], "purchased": [],
+        "soul": DEFAULT_SOUL, "skills": DEFAULT_SKILLS,
+    }
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                saved = json.load(f)
+                defaults.update(saved)
+                # 补全新增字段
+                if "soul" not in saved:
+                    defaults["soul"] = DEFAULT_SOUL
+                if "skills" not in saved:
+                    defaults["skills"] = DEFAULT_SKILLS
+                return defaults
         except Exception:
             pass
-    return {"api_key": "", "base_url": "https://api.deepseek.com/v1",
-            "model": "deepseek-chat", "tasks": [], "purchased": []}
+    return defaults
+
+
+def llm_call(api_key, base_url, model, messages, timeout=30) -> str:
+    """Non-streaming LLM call, returns full response text."""
+    url = base_url.rstrip("/") + "/chat/completions"
+    payload = json.dumps({
+        "model": model, "messages": messages,
+        "stream": False, "max_tokens": 512,
+    }).encode()
+    req = urllib.request.Request(url, data=payload, headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())["choices"][0]["message"]["content"]
 
 def save_data(d):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -190,6 +239,7 @@ class LobsterBookApp(tk.Tk):
         self.content.pack(fill="both", expand=True)
         self._pages = {}
         self._build_page_write()
+        self._build_page_skills()
         self._build_page_tasks()
         self._build_page_plaza()
         self._show_page("write")
@@ -214,7 +264,7 @@ class LobsterBookApp(tk.Tk):
         nav.pack(fill="x")
         nav.pack_propagate(False)
         self._nav_btns = {}
-        for key, label in [("write", "✍ 写书"), ("tasks", "⏰ 定时任务"), ("plaza", "🏪 广场")]:
+        for key, label in [("write", "✍ 写书"), ("skills", "⚡ 技能&灵魂"), ("tasks", "⏰ 定时任务"), ("plaza", "🏪 广场")]:
             btn = tk.Button(nav, text=label, font=SANS_B, bg=CARD, fg=FG2,
                             activebackground=BG, relief="flat", cursor="hand2",
                             padx=20, pady=8,
@@ -365,9 +415,14 @@ class LobsterBookApp(tk.Tk):
 
         def run():
             try:
+                # 灵魂 + 已启用技能 拼接成最终 system prompt
+                soul = self.data.get("soul", DEFAULT_SOUL)
+                active_skills = [s for s in self.data.get("skills", []) if s.get("enabled")]
+                skill_lines = "\n".join(f"- {s['name']}：{s['prompt']}" for s in active_skills)
                 system_prompt = (
-                    f"你是一位专业作家，擅长写{genre}类书籍，风格{style}。"
-                    "每章内容详实，约800-1200字，结构清晰。用中文写作。"
+                    f"{soul}\n\n"
+                    f"当前写作方向：{genre}类书籍，风格{style}。每章约800-1200字，结构清晰。"
+                    + (f"\n\n写作技能要求：\n{skill_lines}" if skill_lines else "")
                 )
 
                 # ── Step 1: 生成大纲 ──────────────────────────────
@@ -508,114 +563,164 @@ class LobsterBookApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("导出失败", str(e))
 
-    # ── Page: Tasks ───────────────────────────────────────────────────
+    # ── Page: Tasks (NLP input) ───────────────────────────────────────
 
     def _build_page_tasks(self):
         page = tk.Frame(self.content, bg=BG)
         self._pages["tasks"] = page
 
-        # Top: add task form
-        form = tk.Frame(page, bg=PANEL)
-        form.pack(fill="x", padx=12, pady=12)
+        # Input area
+        top = tk.Frame(page, bg=PANEL)
+        top.pack(fill="x", padx=12, pady=12)
 
-        tk.Label(form, text="⏰  新建定时写书任务", font=TITLE_F,
-                 bg=PANEL, fg=FG).grid(row=0, column=0, columnspan=4,
-                                        sticky="w", padx=12, pady=(10, 6))
+        tk.Label(top, text="⏰  定时写书任务", font=TITLE_F,
+                 bg=PANEL, fg=FG).pack(anchor="w", padx=14, pady=(12, 4))
+        tk.Label(top, text="用一句话描述任务，AI 自动解析",
+                 font=SANS, bg=PANEL, fg=FG2).pack(anchor="w", padx=14)
 
-        def lbl2(text, row, col):
-            tk.Label(form, text=text, font=SANS, bg=PANEL, fg=FG2).grid(
-                row=row, column=col, sticky="w", padx=(12, 4), pady=4)
+        input_row = tk.Frame(top, bg=PANEL)
+        input_row.pack(fill="x", padx=14, pady=(8, 12))
 
-        lbl2("书名主题", 1, 0)
-        self.t_title = tk.Entry(form, font=SANS, bg=BG, fg=FG,
-                                insertbackground=FG, relief="flat", width=22)
-        self.t_title.grid(row=1, column=1, sticky="ew", padx=4, pady=4)
+        self.t_nlp = tk.Entry(input_row, font=("Segoe UI", 11), bg=BG, fg=FG,
+                              insertbackground=FG, relief="flat")
+        self.t_nlp.pack(side="left", fill="x", expand=True, ipady=6)
+        self.t_nlp.insert(0, "每天早上8点写一本关于AI创业的书，5章，轻松风格")
+        self.t_nlp.bind("<Return>", lambda e: self._parse_task())
 
-        lbl2("类型", 1, 2)
-        self.t_genre = ttk.Combobox(form, font=SANS, state="readonly", width=14,
-            values=["商业/管理", "个人成长", "科技/AI", "小说/故事", "知识科普"])
-        self.t_genre.grid(row=1, column=3, sticky="ew", padx=(4, 12), pady=4)
-        self.t_genre.current(0)
+        self.t_parse_btn = tk.Button(input_row, text="AI 解析 →", font=SANS_B,
+                                     bg=ACCENT, fg="#fff",
+                                     activebackground="#c0392b",
+                                     relief="flat", cursor="hand2", padx=14, pady=6,
+                                     command=self._parse_task)
+        self.t_parse_btn.pack(side="left", padx=(8, 0))
 
-        lbl2("执行时间", 2, 0)
-        time_frame = tk.Frame(form, bg=PANEL)
-        time_frame.grid(row=2, column=1, sticky="w", padx=4, pady=4)
-        self.t_hour = ttk.Spinbox(time_frame, from_=0, to=23, width=4, font=SANS)
-        self.t_hour.pack(side="left")
-        self.t_hour.set("08")
-        tk.Label(time_frame, text=":", bg=PANEL, fg=FG, font=SANS_B).pack(side="left")
-        self.t_min = ttk.Spinbox(time_frame, from_=0, to=59, width=4, font=SANS)
-        self.t_min.pack(side="left")
-        self.t_min.set("00")
-
-        lbl2("重复", 2, 2)
-        self.t_repeat = ttk.Combobox(form, font=SANS, state="readonly", width=14,
-            values=["每天", "每周一", "每周五", "仅一次"])
-        self.t_repeat.grid(row=2, column=3, sticky="ew", padx=(4, 12), pady=4)
-        self.t_repeat.current(0)
-
-        tk.Button(form, text="＋ 添加任务", font=SANS_B,
-                  bg=ACCENT, fg="#fff", activebackground="#c0392b",
-                  relief="flat", cursor="hand2", padx=14, pady=6,
-                  command=self._add_task).grid(row=3, column=0, columnspan=4,
-                                               sticky="w", padx=12, pady=(4, 10))
-        form.columnconfigure(1, weight=1)
-        form.columnconfigure(3, weight=1)
+        # Parsed result confirmation card
+        self.t_confirm_frame = tk.Frame(page, bg=CARD)
+        # (packed on demand)
 
         # Task list
         tk.Label(page, text="任务列表", font=("Segoe UI", 9),
-                 bg=BG, fg=FG2).pack(anchor="w", padx=14)
+                 bg=BG, fg=FG2).pack(anchor="w", padx=14, pady=(4, 2))
 
         list_frame = tk.Frame(page, bg=BG)
-        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 4))
 
-        cols = ("书名", "类型", "时间", "重复", "状态")
+        cols = ("描述", "时间", "重复", "章节", "风格", "状态")
         self.task_tree = ttk.Treeview(list_frame, columns=cols,
-                                      show="headings", height=12)
-        for col in cols:
+                                      show="headings", height=10)
+        widths = [220, 70, 80, 50, 90, 70]
+        for col, w in zip(cols, widths):
             self.task_tree.heading(col, text=col)
-        self.task_tree.column("书名", width=200)
-        self.task_tree.column("类型", width=100)
-        self.task_tree.column("时间", width=80)
-        self.task_tree.column("重复", width=80)
-        self.task_tree.column("状态", width=80)
+            self.task_tree.column(col, width=w)
         self.task_tree.pack(side="left", fill="both", expand=True)
-
         sb = ttk.Scrollbar(list_frame, orient="vertical",
                            command=self.task_tree.yview)
         sb.pack(side="right", fill="y")
         self.task_tree.configure(yscrollcommand=sb.set)
 
-        tk.Button(page, text="🗑  删除选中任务", font=SANS, bg=CARD, fg=FG2,
+        tk.Button(page, text="🗑  删除选中", font=SANS, bg=CARD, fg=FG2,
                   activebackground=ACCENT, activeforeground="#fff",
                   relief="flat", cursor="hand2", padx=10, pady=4,
                   command=self._delete_task).pack(anchor="w", padx=12, pady=(0, 8))
 
         self._refresh_task_tree()
 
-    def _add_task(self):
-        title  = self.t_title.get().strip()
-        genre  = self.t_genre.get()
-        hour   = self.t_hour.get().zfill(2)
-        minute = self.t_min.get().zfill(2)
-        repeat = self.t_repeat.get()
-        if not title:
-            messagebox.showwarning("提示", "请填写书名主题")
+    def _parse_task(self):
+        text = self.t_nlp.get().strip()
+        if not text:
             return
-        task = {"id": int(time.time()), "title": title, "genre": genre,
-                "time": f"{hour}:{minute}", "repeat": repeat, "status": "待机",
-                "enabled": True}
+        if not self.data["api_key"]:
+            messagebox.showwarning("提示", "请先在「设置」中填写 API Key")
+            return
+        self.t_parse_btn.config(state="disabled", text="解析中...")
+
+        def do_parse():
+            parse_prompt = (
+                "从用户描述中提取写书任务信息，只输出 JSON，不要解释，格式：\n"
+                '{"title":"书名/主题","genre":"商业/管理|个人成长|科技/AI|小说/故事|知识科普|投资理财",'
+                '"chapters":章节数整数,"style":"专业严谨|轻松易读|故事驱动|数据导向|励志激励",'
+                '"time":"HH:MM","repeat":"每天|每周一|每周三|每周五|仅一次"}\n\n'
+                f'用户描述：{text}'
+            )
+            try:
+                raw = llm_call(
+                    self.data["api_key"], self.data["base_url"], self.data["model"],
+                    [{"role": "user", "content": parse_prompt}]
+                )
+                # 提取 JSON
+                start = raw.find("{")
+                end   = raw.rfind("}") + 1
+                parsed = json.loads(raw[start:end])
+                self.after(0, lambda p=parsed: self._show_task_confirm(p))
+            except Exception as e:
+                self.after(0, lambda e=e: messagebox.showerror("解析失败", str(e)))
+            finally:
+                self.after(0, lambda: self.t_parse_btn.config(state="normal", text="AI 解析 →"))
+
+        threading.Thread(target=do_parse, daemon=True).start()
+
+    def _show_task_confirm(self, parsed):
+        # 清掉旧卡片
+        for w in self.t_confirm_frame.winfo_children():
+            w.destroy()
+        self.t_confirm_frame.pack(fill="x", padx=12, pady=(0, 8))
+
+        tk.Label(self.t_confirm_frame, text="解析结果 — 确认后添加任务",
+                 font=SANS_B, bg=CARD, fg=ACCENT2).pack(anchor="w", padx=14, pady=(10, 4))
+
+        info = [
+            ("书名/主题", parsed.get("title", "—")),
+            ("类型",     parsed.get("genre", "—")),
+            ("执行时间", parsed.get("time", "—")),
+            ("重复",     parsed.get("repeat", "—")),
+            ("章节数",   str(parsed.get("chapters", 5))),
+            ("写作风格", parsed.get("style", "—")),
+        ]
+        grid = tk.Frame(self.t_confirm_frame, bg=CARD)
+        grid.pack(fill="x", padx=14, pady=4)
+        for i, (k, v) in enumerate(info):
+            tk.Label(grid, text=k + "：", font=SANS, bg=CARD, fg=FG2,
+                     width=8, anchor="e").grid(row=i//3, column=(i%3)*2,
+                                                sticky="e", padx=(10,2), pady=2)
+            tk.Label(grid, text=v, font=SANS_B, bg=CARD, fg=FG,
+                     anchor="w").grid(row=i//3, column=(i%3)*2+1, sticky="w", pady=2)
+
+        btn_row = tk.Frame(self.t_confirm_frame, bg=CARD)
+        btn_row.pack(anchor="e", padx=14, pady=(4, 10))
+        tk.Button(btn_row, text="取消", font=SANS, bg=BG, fg=FG2,
+                  relief="flat", cursor="hand2", padx=10,
+                  command=lambda: self.t_confirm_frame.pack_forget()
+                  ).pack(side="left", padx=4)
+        tk.Button(btn_row, text="✓ 确认添加任务", font=SANS_B,
+                  bg=ACCENT, fg="#fff", activebackground="#c0392b",
+                  relief="flat", cursor="hand2", padx=14, pady=4,
+                  command=lambda p=parsed: self._confirm_add_task(p)
+                  ).pack(side="left")
+
+    def _confirm_add_task(self, parsed):
+        task = {
+            "id":       int(time.time()),
+            "title":    parsed.get("title", "未命名"),
+            "genre":    parsed.get("genre", "个人成长"),
+            "time":     parsed.get("time", "08:00"),
+            "repeat":   parsed.get("repeat", "每天"),
+            "chapters": parsed.get("chapters", 5),
+            "style":    parsed.get("style", "轻松易读"),
+            "status":   "待机",
+            "enabled":  True,
+        }
         self.data["tasks"].append(task)
         save_data(self.data)
+        self.t_confirm_frame.pack_forget()
+        self.t_nlp.delete(0, "end")
         self._refresh_task_tree()
 
     def _delete_task(self):
         sel = self.task_tree.selection()
         if not sel:
             return
-        iid = sel[0]
         self.data["tasks"] = [t for t in self.data["tasks"]
-                              if str(t["id"]) != str(iid)]
+                              if str(t["id"]) != sel[0]]
         save_data(self.data)
         self._refresh_task_tree()
 
@@ -623,8 +728,202 @@ class LobsterBookApp(tk.Tk):
         self.task_tree.delete(*self.task_tree.get_children())
         for t in self.data["tasks"]:
             self.task_tree.insert("", "end", iid=str(t["id"]),
-                values=(t["title"], t["genre"], t["time"],
-                        t["repeat"], t.get("status", "待机")))
+                values=(t.get("title",""), t.get("time",""), t.get("repeat",""),
+                        t.get("chapters",""), t.get("style",""),
+                        t.get("status","待机")))
+
+    # ── Page: Skills & Soul ───────────────────────────────────────────
+
+    def _build_page_skills(self):
+        page = tk.Frame(self.content, bg=BG)
+        self._pages["skills"] = page
+
+        left = tk.Frame(page, bg=PANEL, width=380)
+        left.pack(side="left", fill="y", padx=(12, 6), pady=12)
+        left.pack_propagate(False)
+
+        # ── 灵魂 ──────────────────────────────────────────────────────
+        tk.Label(left, text="灵魂  —  AI 写作人格", font=TITLE_F,
+                 bg=PANEL, fg=ACCENT2).pack(anchor="w", padx=14, pady=(14, 2))
+        tk.Label(left, text="定义 AI 的底层写作身份，所有书籍均使用此基础角色",
+                 font=("Segoe UI", 8), bg=PANEL, fg=FG2).pack(anchor="w", padx=14)
+
+        self.soul_text = tk.Text(left, font=SANS, bg=BG, fg=FG,
+                                 insertbackground=FG, relief="flat",
+                                 height=7, wrap="word")
+        self.soul_text.pack(fill="x", padx=14, pady=(6, 4))
+        self.soul_text.insert("1.0", self.data.get("soul", DEFAULT_SOUL))
+
+        tk.Button(left, text="保存灵魂", font=SANS, bg=ACCENT2, fg="#1a1a2e",
+                  activebackground="#d4813e", relief="flat", cursor="hand2",
+                  padx=10, pady=4, command=self._save_soul
+                  ).pack(anchor="e", padx=14, pady=(0, 10))
+
+        tk.Frame(left, bg=BORDER, height=1).pack(fill="x", padx=14, pady=4)
+
+        # ── 技能列表 ──────────────────────────────────────────────────
+        tk.Label(left, text="技能  —  提示词模块", font=TITLE_F,
+                 bg=PANEL, fg="#7c6af7").pack(anchor="w", padx=14, pady=(10, 2))
+        tk.Label(left, text="勾选技能后，其提示词会拼接到写书系统提示中",
+                 font=("Segoe UI", 8), bg=PANEL, fg=FG2).pack(anchor="w", padx=14)
+
+        skills_frame = tk.Frame(left, bg=PANEL)
+        skills_frame.pack(fill="both", expand=True, padx=14, pady=6)
+
+        self._skill_vars = {}
+        self._refresh_skills_ui(skills_frame)
+
+        # ── 右侧：新增/编辑技能 ───────────────────────────────────────
+        right = tk.Frame(page, bg=BG)
+        right.pack(side="left", fill="both", expand=True, padx=(0, 12), pady=12)
+
+        tk.Label(right, text="新增 / 编辑技能", font=TITLE_F,
+                 bg=BG, fg=FG).pack(anchor="w", pady=(0, 6))
+
+        tk.Label(right, text="技能名称", font=SANS, bg=BG, fg=FG2).pack(anchor="w")
+        self.skill_name_entry = tk.Entry(right, font=SANS, bg=PANEL, fg=FG,
+                                         insertbackground=FG, relief="flat")
+        self.skill_name_entry.pack(fill="x", pady=(2, 8), ipady=4)
+
+        tk.Label(right, text="提示词内容", font=SANS, bg=BG, fg=FG2).pack(anchor="w")
+        tk.Label(right,
+                 text="这段文字会在写书时拼接到系统提示里，告诉 AI 用什么方式写作",
+                 font=("Segoe UI", 8), bg=BG, fg=FG2).pack(anchor="w")
+        self.skill_prompt_text = tk.Text(right, font=SANS, bg=PANEL, fg=FG,
+                                          insertbackground=FG, relief="flat",
+                                          height=6, wrap="word")
+        self.skill_prompt_text.pack(fill="x", pady=(2, 12))
+
+        btn_row = tk.Frame(right, bg=BG)
+        btn_row.pack(anchor="w")
+        tk.Button(btn_row, text="＋ 添加技能", font=SANS_B,
+                  bg="#7c6af7", fg="#fff", activebackground="#5a4ad4",
+                  relief="flat", cursor="hand2", padx=12, pady=6,
+                  command=lambda: self._add_skill(skills_frame)
+                  ).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="🗑 删除选中技能", font=SANS,
+                  bg=CARD, fg=FG2, activebackground=ACCENT,
+                  relief="flat", cursor="hand2", padx=10, pady=6,
+                  command=lambda: self._delete_skill(skills_frame)
+                  ).pack(side="left")
+
+        # Preview of final system prompt
+        tk.Frame(right, bg=BORDER, height=1).pack(fill="x", pady=10)
+        tk.Label(right, text="最终系统提示预览（写书时实际使用）",
+                 font=("Segoe UI", 8), bg=BG, fg=FG2).pack(anchor="w")
+        self.prompt_preview = scrolledtext.ScrolledText(
+            right, font=("Consolas", 8), bg="#0a0a14", fg="#888",
+            relief="flat", wrap="word", height=7, state="disabled"
+        )
+        self.prompt_preview.pack(fill="both", expand=True, pady=(4, 0))
+        self._update_prompt_preview()
+
+    def _refresh_skills_ui(self, frame):
+        for w in frame.winfo_children():
+            w.destroy()
+        self._skill_vars = {}
+        self._skill_selected = tk.StringVar(value="")
+        for skill in self.data.get("skills", []):
+            row = tk.Frame(frame, bg=PANEL)
+            row.pack(fill="x", pady=1)
+            var = tk.BooleanVar(value=skill.get("enabled", False))
+            self._skill_vars[skill["id"]] = var
+            cb = tk.Checkbutton(row, variable=var, bg=PANEL,
+                                activebackground=PANEL,
+                                selectcolor=BG,
+                                command=lambda sid=skill["id"], v=var:
+                                    self._toggle_skill(sid, v))
+            cb.pack(side="left")
+            lbl = tk.Label(row, text=skill["name"], font=SANS_B,
+                           bg=PANEL, fg="#7c6af7" if skill.get("enabled") else FG2,
+                           cursor="hand2", anchor="w")
+            lbl.pack(side="left", fill="x", expand=True)
+            lbl.bind("<Button-1>", lambda e, s=skill: self._load_skill_editor(s))
+            # highlight selected
+            tip = skill["prompt"][:40] + ("…" if len(skill["prompt"]) > 40 else "")
+            tk.Label(row, text=tip, font=("Segoe UI", 7),
+                     bg=PANEL, fg=FG2).pack(side="left", padx=4)
+
+    def _toggle_skill(self, sid, var):
+        for s in self.data["skills"]:
+            if s["id"] == sid:
+                s["enabled"] = var.get()
+        save_data(self.data)
+        self._update_prompt_preview()
+        # refresh label color
+        if hasattr(self, '_pages') and "skills" in self._pages:
+            page = self._pages["skills"]
+            left = page.winfo_children()[0]
+            sf = [w for w in left.winfo_children()
+                  if isinstance(w, tk.Frame) and w.cget("bg") == PANEL][-1]
+            self._refresh_skills_ui(sf)
+
+    def _load_skill_editor(self, skill):
+        self.skill_name_entry.delete(0, "end")
+        self.skill_name_entry.insert(0, skill["name"])
+        self.skill_prompt_text.delete("1.0", "end")
+        self.skill_prompt_text.insert("1.0", skill["prompt"])
+        self._editing_skill_id = skill["id"]
+
+    def _add_skill(self, skills_frame):
+        name   = self.skill_name_entry.get().strip()
+        prompt = self.skill_prompt_text.get("1.0", "end").strip()
+        if not name or not prompt:
+            messagebox.showwarning("提示", "请填写技能名称和提示词内容")
+            return
+        # 如果是编辑已有技能
+        if hasattr(self, "_editing_skill_id"):
+            for s in self.data["skills"]:
+                if s["id"] == self._editing_skill_id:
+                    s["name"]   = name
+                    s["prompt"] = prompt
+                    break
+            del self._editing_skill_id
+        else:
+            self.data["skills"].append({
+                "id":      int(time.time()),
+                "name":    name,
+                "prompt":  prompt,
+                "enabled": True,
+            })
+        save_data(self.data)
+        self.skill_name_entry.delete(0, "end")
+        self.skill_prompt_text.delete("1.0", "end")
+        self._refresh_skills_ui(skills_frame)
+        self._update_prompt_preview()
+
+    def _delete_skill(self, skills_frame):
+        if not hasattr(self, "_editing_skill_id"):
+            messagebox.showinfo("提示", "请先点击左侧技能名称选中要删除的技能")
+            return
+        self.data["skills"] = [s for s in self.data["skills"]
+                               if s["id"] != self._editing_skill_id]
+        del self._editing_skill_id
+        save_data(self.data)
+        self.skill_name_entry.delete(0, "end")
+        self.skill_prompt_text.delete("1.0", "end")
+        self._refresh_skills_ui(skills_frame)
+        self._update_prompt_preview()
+
+    def _save_soul(self):
+        self.data["soul"] = self.soul_text.get("1.0", "end").strip()
+        save_data(self.data)
+        self._update_prompt_preview()
+        messagebox.showinfo("已保存", "灵魂设定已保存。")
+
+    def _update_prompt_preview(self):
+        if not hasattr(self, "prompt_preview"):
+            return
+        soul = self.data.get("soul", DEFAULT_SOUL)
+        active = [s for s in self.data.get("skills", []) if s.get("enabled")]
+        skill_lines = "\n".join(f"- {s['name']}：{s['prompt']}" for s in active)
+        preview = soul
+        if skill_lines:
+            preview += f"\n\n写作技能要求：\n{skill_lines}"
+        self.prompt_preview.configure(state="normal")
+        self.prompt_preview.delete("1.0", "end")
+        self.prompt_preview.insert("1.0", preview)
+        self.prompt_preview.configure(state="disabled")
 
     def _start_timer_worker(self):
         def worker():
@@ -652,7 +951,16 @@ class LobsterBookApp(tk.Tk):
             self._refresh_task_tree()
             self._show_page("write")
             self.w_title.delete(0, "end")
-            self.w_title.insert(0, task["title"])
+            self.w_title.insert(0, task.get("title", ""))
+            # 同步章节数和风格
+            try:
+                self.w_chapters.set(task.get("chapters", 5))
+            except Exception:
+                pass
+            styles = ["专业严谨", "轻松易读", "故事驱动", "数据导向", "励志激励"]
+            s = task.get("style", "轻松易读")
+            if s in styles:
+                self.w_style.current(styles.index(s))
             self._start_writing()
             task["status"] = "完成"
             if task["repeat"] == "仅一次":
