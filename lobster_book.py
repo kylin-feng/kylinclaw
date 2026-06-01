@@ -110,21 +110,77 @@ DEFAULT_SOUL = (
     "用中文写作，语言流畅自然，避免堆砌辞藻。"
 )
 
+# category → color
+SKILL_CATS = {
+    "结构": "#7c6af7",
+    "表达": "#3b9eff",
+    "节奏": "#f4a261",
+    "互动": "#52c41a",
+    "深度": "#20c997",
+    "风格": "#e85d9a",
+}
+
 DEFAULT_SKILLS = [
-    {"id":1, "name":"故事驱动",   "enabled":False,
-     "prompt":"每章以一个真实故事或案例开头，用叙事方式引入核心观点，增强代入感。"},
-    {"id":2, "name":"数据支撑",   "enabled":False,
-     "prompt":"关键论点必须引用具体数据、研究报告或权威来源，增强说服力和可信度。"},
-    {"id":3, "name":"行动导向",   "enabled":True,
-     "prompt":"每章结尾提供3-5条可立即执行的行动清单，让读者知道下一步怎么做。"},
-    {"id":4, "name":"悬念钩子",   "enabled":False,
-     "prompt":"每章结尾设置悬念或留下问题，驱动读者继续阅读下一章。"},
-    {"id":5, "name":"类比教学",   "enabled":False,
-     "prompt":"用生动的比喻和类比解释抽象概念，让零基础读者也能快速理解。"},
-    {"id":6, "name":"批判视角",   "enabled":False,
-     "prompt":"主动呈现反对观点和潜在风险，体现客观性，避免一味正面论述。"},
-    {"id":7, "name":"金句提炼",   "enabled":True,
-     "prompt":"每章提炼2-3句核心金句，用加粗或独立段落标注，方便读者摘录。"},
+    # 结构
+    {"id":1,  "cat":"结构", "name":"故事驱动",   "desc":"每章以真实故事开场，让读者自然融入",
+     "enabled":False, "prompt":"每章以一个真实故事或案例开头，用叙事方式引入核心观点，增强代入感。"},
+    {"id":2,  "cat":"结构", "name":"总分总",     "desc":"先亮结论，再展开，最后总结升华",
+     "enabled":False, "prompt":"每章严格遵循总-分-总结构：先给出核心结论，再逐点展开论述，最后总结并升华。"},
+    {"id":3,  "cat":"结构", "name":"金字塔原理", "desc":"结论前置，逻辑层层递进",
+     "enabled":False, "prompt":"采用金字塔原理：最重要的结论放在最前面，后续内容都是对结论的支撑和论证。"},
+    {"id":4,  "cat":"结构", "name":"章节呼应",   "desc":"前后章节相互引用，形成整体感",
+     "enabled":False, "prompt":"章节之间相互呼应，后章引用前章内容并深化，前章为后章埋下伏笔，增强全书整体感。"},
+    {"id":5,  "cat":"结构", "name":"反转叙事",   "desc":"先呈现常见误解，再揭示真相",
+     "enabled":False, "prompt":"每章先呈现读者普遍持有的误解或常识，然后用证据揭示真相，制造认知反转。"},
+    # 表达
+    {"id":6,  "cat":"表达", "name":"数据支撑",   "desc":"关键观点配具体数字和研究佐证",
+     "enabled":False, "prompt":"关键论点必须引用具体数据、研究报告或权威来源，增强说服力和可信度。"},
+    {"id":7,  "cat":"表达", "name":"类比教学",   "desc":"用生活比喻把抽象概念讲透彻",
+     "enabled":False, "prompt":"用生动的比喻和类比解释抽象概念，让零基础读者也能快速理解。"},
+    {"id":8,  "cat":"表达", "name":"金句提炼",   "desc":"每章萃取2-3句值得收藏的精华",
+     "enabled":True,  "prompt":"每章提炼2-3句核心金句，用加粗或独立段落标注，方便读者摘录。"},
+    {"id":9,  "cat":"表达", "name":"对话体",     "desc":"穿插对话和问答，轻松好读",
+     "enabled":False, "prompt":"穿插对话、采访或问答形式，让内容像交谈一样自然流畅，减少阅读疲劳。"},
+    {"id":10, "cat":"表达", "name":"专家背书",   "desc":"引用权威人士观点增强可信度",
+     "enabled":False, "prompt":"引用知名专家、学者或成功人士的观点和经历，为核心论点提供权威背书。"},
+    {"id":11, "cat":"表达", "name":"案例矩阵",   "desc":"每个观点配正反两个真实案例",
+     "enabled":False, "prompt":"每个核心观点提供正面成功案例和反面失败案例各一个，通过对比加深理解。"},
+    # 节奏
+    {"id":12, "cat":"节奏", "name":"悬念钩子",   "desc":"每章结尾留悬念，让人忍不住翻页",
+     "enabled":False, "prompt":"每章结尾设置悬念或留下问题，驱动读者继续阅读下一章。"},
+    {"id":13, "cat":"节奏", "name":"短句冲击",   "desc":"关键观点用短句呈现，直击内心",
+     "enabled":False, "prompt":"关键观点和核心结论使用短句表达，1句话1个意思，增强冲击力和记忆度。"},
+    {"id":14, "cat":"节奏", "name":"留白呼吸",   "desc":"张弛有度，给读者留下思考空间",
+     "enabled":False, "prompt":"内容张弛有度，重要观点之后留有过渡段落，给读者消化和思考的空间。"},
+    {"id":15, "cat":"节奏", "name":"情绪起伏",   "desc":"高潮与舒缓交替，阅读不疲劳",
+     "enabled":False, "prompt":"章节内容安排情绪起伏：紧张与舒缓交替，高潮与平静相间，维持读者阅读动力。"},
+    # 互动
+    {"id":16, "cat":"互动", "name":"行动导向",   "desc":"每章结尾给出可立刻执行的步骤",
+     "enabled":True,  "prompt":"每章结尾提供3-5条可立即执行的行动清单，让读者知道下一步怎么做。"},
+    {"id":17, "cat":"互动", "name":"问题引导",   "desc":"用问题开启段落，激发读者思考",
+     "enabled":False, "prompt":"每个重要段落用一个问题开启，引发读者思考，再给出解答，增强参与感。"},
+    {"id":18, "cat":"互动", "name":"读者代入",   "desc":'大量用"你"，让读者感同身受',
+     "enabled":False, "prompt":'大量使用第二人称"你"，将读者直接代入场景，让内容与读者产生直接关联。'},
+    {"id":19, "cat":"互动", "name":"读者痛点",   "desc":"从读者痛点切入，引发强烈共鸣",
+     "enabled":False, "prompt":"每章从读者最熟悉的痛点或困惑切入，精准戳中内心，引发强烈共鸣后再给出解法。"},
+    {"id":20, "cat":"互动", "name":"实用工具",   "desc":"提供清单、表格、框架等工具",
+     "enabled":False, "prompt":"为读者提供可直接使用的工具：清单、框架、表格、公式，让书变成工具书。"},
+    # 深度
+    {"id":21, "cat":"深度", "name":"批判视角",   "desc":"主动呈现反对声音，体现思考深度",
+     "enabled":False, "prompt":"主动呈现反对观点和潜在风险，体现客观性，避免一味正面论述。"},
+    {"id":22, "cat":"深度", "name":"历史溯源",   "desc":"追溯概念的来龙去脉，增加厚度",
+     "enabled":False, "prompt":'追溯核心概念的历史背景、起源和演变过程，让读者理解"为什么"而非只知道"是什么"。'},
+    {"id":23, "cat":"深度", "name":"跨领域连接", "desc":"打通不同领域，产生意外洞见",
+     "enabled":False, "prompt":"将本书主题与其他领域（哲学、心理学、生物学等）的知识连接，产生跨界洞见。"},
+    {"id":24, "cat":"深度", "name":"第一原理",   "desc":"回归底层逻辑，重建认知框架",
+     "enabled":False, "prompt":"用第一原理思维，从最基础的事实和假设出发，重新推导结论，而不是依赖行业惯例。"},
+    # 风格
+    {"id":25, "cat":"风格", "name":"幽默调侃",   "desc":"适当加入幽默，阅读不枯燥",
+     "enabled":False, "prompt":"适当加入幽默感和自嘲，让严肃内容变得轻松，减少读者的阅读疲劳。"},
+    {"id":26, "cat":"风格", "name":"极简克制",   "desc":"每句话都有信息量，去掉废话",
+     "enabled":False, "prompt":"极简写作：去除所有冗余词汇和套话，每句话都必须有实质信息量，宁可少说不废话。"},
+    {"id":27, "cat":"风格", "name":"场景还原",   "desc":"还原真实场景，画面感十足",
+     "enabled":False, "prompt":"用细节还原真实场景：时间、地点、人物、对话，让读者如临其境，增强代入感。"},
 ]
 
 def load_data():
@@ -240,6 +296,7 @@ class LobsterBookApp(tk.Tk):
         self._pages = {}
         self._build_page_write()
         self._build_page_skills()
+        self._build_page_soul()
         self._build_page_tasks()
         self._build_page_plaza()
         self._show_page("write")
@@ -264,7 +321,7 @@ class LobsterBookApp(tk.Tk):
         nav.pack(fill="x")
         nav.pack_propagate(False)
         self._nav_btns = {}
-        for key, label in [("write", "✍ 写书"), ("skills", "⚡ 技能&灵魂"), ("tasks", "⏰ 定时任务"), ("plaza", "🏪 广场")]:
+        for key, label in [("write", "✍ 写书"), ("skills", "⚡ 技能"), ("soul", "✨ 灵魂"), ("tasks", "⏰ 定时任务"), ("plaza", "🏪 广场")]:
             btn = tk.Button(nav, text=label, font=SANS_B, bg=CARD, fg=FG2,
                             activebackground=BG, relief="flat", cursor="hand2",
                             padx=20, pady=8,
@@ -882,6 +939,19 @@ class LobsterBookApp(tk.Tk):
         threading.Thread(target=build, daemon=True).start()
 
 
+def _repaint_card(widget, bg):
+    """Recursively update bg of a card and its children."""
+    try:
+        widget.configure(bg=bg)
+    except Exception:
+        pass
+    for child in widget.winfo_children():
+        # Don't repaint the colored top bar
+        if isinstance(child, tk.Frame) and child.winfo_height() == 3:
+            continue
+        _repaint_card(child, bg)
+
+
 def _chapter_header(pdf, fn, st, W, text):
     """渲染章节标题页眉样式。"""
     ac = st["accent"]
@@ -1067,196 +1137,209 @@ def _chapter_header(pdf, fn, st, W, text):
 
     # ── Page: Skills & Soul ───────────────────────────────────────────
 
+    # ── Page: Skills (card grid) ──────────────────────────────────────
+
     def _build_page_skills(self):
         page = tk.Frame(self.content, bg=BG)
         self._pages["skills"] = page
 
-        left = tk.Frame(page, bg=PANEL, width=380)
-        left.pack(side="left", fill="y", padx=(12, 6), pady=12)
-        left.pack_propagate(False)
+        # Header
+        hdr = tk.Frame(page, bg=PANEL)
+        hdr.pack(fill="x", padx=12, pady=(12, 0))
+        tk.Label(hdr, text="⚡  写作技能", font=TITLE_F,
+                 bg=PANEL, fg=FG).pack(side="left", padx=14, pady=(10, 4))
+        tk.Label(hdr, text="勾选技能后写书时自动应用，可多选叠加",
+                 font=SANS, bg=PANEL, fg=FG2).pack(side="left", pady=(10, 4))
 
-        # ── 灵魂 ──────────────────────────────────────────────────────
-        tk.Label(left, text="灵魂  —  AI 写作人格", font=TITLE_F,
-                 bg=PANEL, fg=ACCENT2).pack(anchor="w", padx=14, pady=(14, 2))
-        tk.Label(left, text="定义 AI 的底层写作身份，所有书籍均使用此基础角色",
-                 font=("Segoe UI", 8), bg=PANEL, fg=FG2).pack(anchor="w", padx=14)
+        # Category filter bar
+        cat_bar = tk.Frame(page, bg=PANEL)
+        cat_bar.pack(fill="x", padx=12, pady=(0, 8))
+        self._cat_filter = tk.StringVar(value="全部")
+        for cat in ["全部"] + list(SKILL_CATS.keys()):
+            color = SKILL_CATS.get(cat, FG2)
+            btn = tk.Button(cat_bar, text=cat, font=("Segoe UI", 8, "bold"),
+                            bg=PANEL, fg=color,
+                            activebackground=color, activeforeground="#fff",
+                            relief="flat", cursor="hand2", padx=10, pady=4,
+                            command=lambda c=cat: self._filter_skills(c))
+            btn.pack(side="left", padx=(14 if cat == "全部" else 2, 0), pady=(0, 8))
 
-        self.soul_text = tk.Text(left, font=SANS, bg=BG, fg=FG,
-                                 insertbackground=FG, relief="flat",
-                                 height=7, wrap="word")
-        self.soul_text.pack(fill="x", padx=14, pady=(6, 4))
-        self.soul_text.insert("1.0", self.data.get("soul", DEFAULT_SOUL))
+        # Scrollable card grid
+        outer = tk.Frame(page, bg=BG)
+        outer.pack(fill="both", expand=True, padx=12)
 
-        tk.Button(left, text="保存灵魂", font=SANS, bg=ACCENT2, fg="#1a1a2e",
-                  activebackground="#d4813e", relief="flat", cursor="hand2",
-                  padx=10, pady=4, command=self._save_soul
-                  ).pack(anchor="e", padx=14, pady=(0, 10))
+        canvas = tk.Canvas(outer, bg=BG, highlightthickness=0)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
 
-        tk.Frame(left, bg=BORDER, height=1).pack(fill="x", padx=14, pady=4)
+        self._skills_inner = tk.Frame(canvas, bg=BG)
+        self._skills_win_id = canvas.create_window((0, 0), window=self._skills_inner, anchor="nw")
+        self._skills_inner.bind("<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+            lambda e: canvas.itemconfig(self._skills_win_id, width=e.width))
+        canvas.bind_all("<MouseWheel>",
+            lambda e: canvas.yview_scroll(-1 * (e.delta // 120), "units"))
 
-        # ── 技能列表 ──────────────────────────────────────────────────
-        tk.Label(left, text="技能  —  提示词模块", font=TITLE_F,
-                 bg=PANEL, fg="#7c6af7").pack(anchor="w", padx=14, pady=(10, 2))
-        tk.Label(left, text="勾选技能后，其提示词会拼接到写书系统提示中",
-                 font=("Segoe UI", 8), bg=PANEL, fg=FG2).pack(anchor="w", padx=14)
-
-        skills_frame = tk.Frame(left, bg=PANEL)
-        skills_frame.pack(fill="both", expand=True, padx=14, pady=6)
-
+        self._skills_canvas = canvas
         self._skill_vars = {}
-        self._refresh_skills_ui(skills_frame)
+        self._render_skill_cards("全部")
 
-        # ── 右侧：新增/编辑技能 ───────────────────────────────────────
-        right = tk.Frame(page, bg=BG)
-        right.pack(side="left", fill="both", expand=True, padx=(0, 12), pady=12)
+    def _filter_skills(self, cat):
+        self._cat_filter.set(cat)
+        self._render_skill_cards(cat)
 
-        tk.Label(right, text="新增 / 编辑技能", font=TITLE_F,
-                 bg=BG, fg=FG).pack(anchor="w", pady=(0, 6))
-
-        tk.Label(right, text="技能名称", font=SANS, bg=BG, fg=FG2).pack(anchor="w")
-        self.skill_name_entry = tk.Entry(right, font=SANS, bg=PANEL, fg=FG,
-                                         insertbackground=FG, relief="flat")
-        self.skill_name_entry.pack(fill="x", pady=(2, 8), ipady=4)
-
-        tk.Label(right, text="提示词内容", font=SANS, bg=BG, fg=FG2).pack(anchor="w")
-        tk.Label(right,
-                 text="这段文字会在写书时拼接到系统提示里，告诉 AI 用什么方式写作",
-                 font=("Segoe UI", 8), bg=BG, fg=FG2).pack(anchor="w")
-        self.skill_prompt_text = tk.Text(right, font=SANS, bg=PANEL, fg=FG,
-                                          insertbackground=FG, relief="flat",
-                                          height=6, wrap="word")
-        self.skill_prompt_text.pack(fill="x", pady=(2, 12))
-
-        btn_row = tk.Frame(right, bg=BG)
-        btn_row.pack(anchor="w")
-        tk.Button(btn_row, text="＋ 添加技能", font=SANS_B,
-                  bg="#7c6af7", fg="#fff", activebackground="#5a4ad4",
-                  relief="flat", cursor="hand2", padx=12, pady=6,
-                  command=lambda: self._add_skill(skills_frame)
-                  ).pack(side="left", padx=(0, 8))
-        tk.Button(btn_row, text="🗑 删除选中技能", font=SANS,
-                  bg=CARD, fg=FG2, activebackground=ACCENT,
-                  relief="flat", cursor="hand2", padx=10, pady=6,
-                  command=lambda: self._delete_skill(skills_frame)
-                  ).pack(side="left")
-
-        # Preview of final system prompt
-        tk.Frame(right, bg=BORDER, height=1).pack(fill="x", pady=10)
-        tk.Label(right, text="最终系统提示预览（写书时实际使用）",
-                 font=("Segoe UI", 8), bg=BG, fg=FG2).pack(anchor="w")
-        self.prompt_preview = scrolledtext.ScrolledText(
-            right, font=("Consolas", 8), bg="#0a0a14", fg="#888",
-            relief="flat", wrap="word", height=7, state="disabled"
-        )
-        self.prompt_preview.pack(fill="both", expand=True, pady=(4, 0))
-        self._update_prompt_preview()
-
-    def _refresh_skills_ui(self, frame):
-        for w in frame.winfo_children():
+    def _render_skill_cards(self, cat_filter):
+        for w in self._skills_inner.winfo_children():
             w.destroy()
         self._skill_vars = {}
-        self._skill_selected = tk.StringVar(value="")
-        for skill in self.data.get("skills", []):
-            row = tk.Frame(frame, bg=PANEL)
-            row.pack(fill="x", pady=1)
-            var = tk.BooleanVar(value=skill.get("enabled", False))
-            self._skill_vars[skill["id"]] = var
-            cb = tk.Checkbutton(row, variable=var, bg=PANEL,
-                                activebackground=PANEL,
-                                selectcolor=BG,
-                                command=lambda sid=skill["id"], v=var:
-                                    self._toggle_skill(sid, v))
-            cb.pack(side="left")
-            lbl = tk.Label(row, text=skill["name"], font=SANS_B,
-                           bg=PANEL, fg="#7c6af7" if skill.get("enabled") else FG2,
-                           cursor="hand2", anchor="w")
-            lbl.pack(side="left", fill="x", expand=True)
-            lbl.bind("<Button-1>", lambda e, s=skill: self._load_skill_editor(s))
-            # highlight selected
-            tip = skill["prompt"][:40] + ("…" if len(skill["prompt"]) > 40 else "")
-            tk.Label(row, text=tip, font=("Segoe UI", 7),
-                     bg=PANEL, fg=FG2).pack(side="left", padx=4)
 
-    def _toggle_skill(self, sid, var):
+        skills = self.data.get("skills", [])
+        if cat_filter != "全部":
+            skills = [s for s in skills if s.get("cat") == cat_filter]
+
+        COLS = 3
+        for idx, skill in enumerate(skills):
+            row_i, col_i = divmod(idx, COLS)
+            enabled = skill.get("enabled", False)
+            cat_color = SKILL_CATS.get(skill.get("cat", ""), FG2)
+            card_bg = "#1e2a1e" if enabled else CARD
+
+            card = tk.Frame(self._skills_inner, bg=card_bg, padx=0, pady=0)
+            card.grid(row=row_i, column=col_i, padx=6, pady=6, sticky="nsew")
+            self._skills_inner.columnconfigure(col_i, weight=1)
+
+            # Color top bar
+            tk.Frame(card, bg=cat_color, height=3).pack(fill="x")
+
+            body = tk.Frame(card, bg=card_bg, padx=12, pady=8)
+            body.pack(fill="both", expand=True)
+
+            # Top row: category tag + checkbox
+            top_row = tk.Frame(body, bg=card_bg)
+            top_row.pack(fill="x")
+            tk.Label(top_row, text=skill.get("cat", ""),
+                     font=("Segoe UI", 7, "bold"), bg=cat_color,
+                     fg="#fff", padx=5, pady=1).pack(side="left")
+
+            var = tk.BooleanVar(value=enabled)
+            self._skill_vars[skill["id"]] = var
+            cb = tk.Checkbutton(top_row, variable=var, bg=card_bg,
+                                activebackground=card_bg, selectcolor=BG,
+                                cursor="hand2",
+                                command=lambda sid=skill["id"], v=var, c=card:
+                                    self._toggle_skill(sid, v, c))
+            cb.pack(side="right")
+
+            # Skill name
+            tk.Label(body, text=skill["name"], font=("Segoe UI", 11, "bold"),
+                     bg=card_bg,
+                     fg=cat_color if enabled else FG).pack(anchor="w", pady=(4, 2))
+
+            # Description (user-friendly, no prompt shown)
+            desc = skill.get("desc", "")
+            tk.Label(body, text=desc, font=("Segoe UI", 8),
+                     bg=card_bg, fg=FG2, wraplength=180,
+                     justify="left").pack(anchor="w")
+
+            # Click card to toggle
+            for w in [card, body]:
+                w.bind("<Button-1>", lambda e, sid=skill["id"], v=var, c=card:
+                       (v.set(not v.get()), self._toggle_skill(sid, v, c)))
+
+    def _toggle_skill(self, sid, var, card=None):
+        enabled = var.get()
         for s in self.data["skills"]:
             if s["id"] == sid:
-                s["enabled"] = var.get()
+                s["enabled"] = enabled
         save_data(self.data)
-        self._update_prompt_preview()
-        # refresh label color
-        if hasattr(self, '_pages') and "skills" in self._pages:
-            page = self._pages["skills"]
-            left = page.winfo_children()[0]
-            sf = [w for w in left.winfo_children()
-                  if isinstance(w, tk.Frame) and w.cget("bg") == PANEL][-1]
-            self._refresh_skills_ui(sf)
+        # Update card color live
+        if card:
+            new_bg = "#1e2a1e" if enabled else CARD
+            _repaint_card(card, new_bg)
+        # Refresh active count badge if exists
+        self._update_active_count()
 
-    def _load_skill_editor(self, skill):
-        self.skill_name_entry.delete(0, "end")
-        self.skill_name_entry.insert(0, skill["name"])
-        self.skill_prompt_text.delete("1.0", "end")
-        self.skill_prompt_text.insert("1.0", skill["prompt"])
-        self._editing_skill_id = skill["id"]
+    def _update_active_count(self):
+        active = sum(1 for s in self.data.get("skills", []) if s.get("enabled"))
+        if hasattr(self, "_active_lbl"):
+            self._active_lbl.config(text=f"已启用 {active} 项技能")
 
-    def _add_skill(self, skills_frame):
-        name   = self.skill_name_entry.get().strip()
-        prompt = self.skill_prompt_text.get("1.0", "end").strip()
-        if not name or not prompt:
-            messagebox.showwarning("提示", "请填写技能名称和提示词内容")
-            return
-        # 如果是编辑已有技能
-        if hasattr(self, "_editing_skill_id"):
-            for s in self.data["skills"]:
-                if s["id"] == self._editing_skill_id:
-                    s["name"]   = name
-                    s["prompt"] = prompt
-                    break
-            del self._editing_skill_id
-        else:
-            self.data["skills"].append({
-                "id":      int(time.time()),
-                "name":    name,
-                "prompt":  prompt,
-                "enabled": True,
-            })
-        save_data(self.data)
-        self.skill_name_entry.delete(0, "end")
-        self.skill_prompt_text.delete("1.0", "end")
-        self._refresh_skills_ui(skills_frame)
-        self._update_prompt_preview()
+    # ── Page: Soul ────────────────────────────────────────────────────
 
-    def _delete_skill(self, skills_frame):
-        if not hasattr(self, "_editing_skill_id"):
-            messagebox.showinfo("提示", "请先点击左侧技能名称选中要删除的技能")
-            return
-        self.data["skills"] = [s for s in self.data["skills"]
-                               if s["id"] != self._editing_skill_id]
-        del self._editing_skill_id
-        save_data(self.data)
-        self.skill_name_entry.delete(0, "end")
-        self.skill_prompt_text.delete("1.0", "end")
-        self._refresh_skills_ui(skills_frame)
-        self._update_prompt_preview()
+    def _build_page_soul(self):
+        page = tk.Frame(self.content, bg=BG)
+        self._pages["soul"] = page
+
+        # Left: soul editor
+        left = tk.Frame(page, bg=BG)
+        left.pack(side="left", fill="both", expand=True, padx=(16, 8), pady=16)
+
+        tk.Label(left, text="✨  AI 写作灵魂", font=("Segoe UI", 14, "bold"),
+                 bg=BG, fg=ACCENT2).pack(anchor="w")
+        tk.Label(left, text="这是 AI 的底层人格设定，影响每一本书的气质与风格",
+                 font=SANS, bg=BG, fg=FG2).pack(anchor="w", pady=(2, 12))
+
+        self.soul_text = tk.Text(left, font=("Segoe UI", 10), bg=PANEL, fg=FG,
+                                 insertbackground=FG, relief="flat",
+                                 wrap="word", padx=14, pady=12)
+        self.soul_text.pack(fill="both", expand=True)
+        self.soul_text.insert("1.0", self.data.get("soul", DEFAULT_SOUL))
+
+        btn_row = tk.Frame(left, bg=BG)
+        btn_row.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_row, text="恢复默认", font=SANS, bg=CARD, fg=FG2,
+                  relief="flat", cursor="hand2", padx=12, pady=6,
+                  command=self._reset_soul).pack(side="left")
+        tk.Button(btn_row, text="保存灵魂设定", font=SANS_B,
+                  bg=ACCENT2, fg="#1a1a2e", activebackground="#d4813e",
+                  relief="flat", cursor="hand2", padx=16, pady=6,
+                  command=self._save_soul).pack(side="right")
+
+        # Right: tips panel
+        right = tk.Frame(page, bg=PANEL, width=260)
+        right.pack(side="right", fill="y", padx=(0, 16), pady=16)
+        right.pack_propagate(False)
+
+        tk.Label(right, text="写作什么？", font=SANS_B,
+                 bg=PANEL, fg=FG).pack(anchor="w", padx=16, pady=(16, 6))
+
+        presets = [
+            ("商业导师", "你是一位有20年实战经验的商业导师，善用真实案例，语言犀利直接，帮助读者解决实际问题。"),
+            ("学术严谨", "你是一位学术研究者，文风严谨，论据充分，注重逻辑推理，引用权威资料，语言精准克制。"),
+            ("故事高手", "你是一位擅长讲故事的作家，善于用叙事构建情感共鸣，文字生动，节奏感强，让读者欲罢不能。"),
+            ("轻松博主", "你是一位受欢迎的知识博主，语言轻松幽默，善于把复杂知识讲得简单有趣，读者定位是普通大众。"),
+            ("励志教练", "你是一位激励型作家，文字充满力量，善于触达读者内心深处，激发行动力和改变欲望。"),
+        ]
+        for name, soul in presets:
+            def apply(s=soul):
+                self.soul_text.delete("1.0", "end")
+                self.soul_text.insert("1.0", s)
+            tk.Button(right, text=name, font=SANS, bg=CARD, fg=FG,
+                      activebackground=ACCENT2, activeforeground="#1a1a2e",
+                      relief="flat", cursor="hand2", anchor="w", padx=12, pady=5,
+                      command=apply).pack(fill="x", padx=12, pady=2)
+
+        tk.Frame(right, bg=BORDER, height=1).pack(fill="x", padx=12, pady=10)
+        tk.Label(right, text="提示：修改灵魂后点击「保存」\n再去写书，效果立刻生效。",
+                 font=("Segoe UI", 8), bg=PANEL, fg=FG2,
+                 justify="left").pack(anchor="w", padx=16)
+
+        # Active skills count badge (referenced in _update_active_count)
+        self._active_lbl = tk.Label(right, font=("Segoe UI", 8), bg=PANEL, fg=GREEN)
+        self._active_lbl.pack(anchor="w", padx=16, pady=(6, 0))
+        self._update_active_count()
 
     def _save_soul(self):
         self.data["soul"] = self.soul_text.get("1.0", "end").strip()
         save_data(self.data)
-        self._update_prompt_preview()
-        messagebox.showinfo("已保存", "灵魂设定已保存。")
+        messagebox.showinfo("已保存", "灵魂设定已保存，下次写书立刻生效。")
 
-    def _update_prompt_preview(self):
-        if not hasattr(self, "prompt_preview"):
-            return
-        soul = self.data.get("soul", DEFAULT_SOUL)
-        active = [s for s in self.data.get("skills", []) if s.get("enabled")]
-        skill_lines = "\n".join(f"- {s['name']}：{s['prompt']}" for s in active)
-        preview = soul
-        if skill_lines:
-            preview += f"\n\n写作技能要求：\n{skill_lines}"
-        self.prompt_preview.configure(state="normal")
-        self.prompt_preview.delete("1.0", "end")
-        self.prompt_preview.insert("1.0", preview)
-        self.prompt_preview.configure(state="disabled")
+    def _reset_soul(self):
+        self.soul_text.delete("1.0", "end")
+        self.soul_text.insert("1.0", DEFAULT_SOUL)
 
     def _start_timer_worker(self):
         def worker():
