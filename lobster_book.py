@@ -939,35 +939,6 @@ class LobsterBookApp(tk.Tk):
         threading.Thread(target=build, daemon=True).start()
 
 
-def _repaint_card(widget, bg):
-    """Recursively update bg of a card and its children."""
-    try:
-        widget.configure(bg=bg)
-    except Exception:
-        pass
-    for child in widget.winfo_children():
-        # Don't repaint the colored top bar
-        if isinstance(child, tk.Frame) and child.winfo_height() == 3:
-            continue
-        _repaint_card(child, bg)
-
-
-def _chapter_header(pdf, fn, st, W, text):
-    """渲染章节标题页眉样式。"""
-    ac = st["accent"]
-    pdf.set_fill_color(*ac)
-    pdf.rect(0, 0, 8, 40, "F")
-    pdf.set_font(fn, size=18)
-    pdf.set_text_color(*st["chapter_fg"])
-    pdf.set_xy(16, 14)
-    pdf.cell(0, 10, text, ln=True)
-    pdf.set_draw_color(*ac)
-    pdf.set_line_width(0.4)
-    pdf.line(16, 28, W - 20, 28)
-    pdf.ln(8)
-
-    # ── Page: Tasks (NLP input) ───────────────────────────────────────
-
     def _build_page_tasks(self):
         page = tk.Frame(self.content, bg=BG)
         self._pages["tasks"] = page
@@ -1573,6 +1544,36 @@ def _chapter_header(pdf, fn, st, W, text):
                   activebackground="#c0392b", relief="flat",
                   cursor="hand2", pady=8, command=save).pack(
                       fill="x", padx=20, pady=16)
+
+
+
+
+def _repaint_card(widget, bg):
+    """Recursively update bg of a card and its children."""
+    try:
+        widget.configure(bg=bg)
+    except Exception:
+        pass
+    for child in widget.winfo_children():
+        # Don't repaint the colored top bar
+        if isinstance(child, tk.Frame) and child.winfo_height() == 3:
+            continue
+        _repaint_card(child, bg)
+
+
+def _chapter_header(pdf, fn, st, W, text):
+    """渲染章节标题页眉样式。"""
+    ac = st["accent"]
+    pdf.set_fill_color(*ac)
+    pdf.rect(0, 0, 8, 40, "F")
+    pdf.set_font(fn, size=18)
+    pdf.set_text_color(*st["chapter_fg"])
+    pdf.set_xy(16, 14)
+    pdf.cell(0, 10, text, ln=True)
+    pdf.set_draw_color(*ac)
+    pdf.set_line_width(0.4)
+    pdf.line(16, 28, W - 20, 28)
+    pdf.ln(8)
 
 
 # ── Entry ─────────────────────────────────────────────────────────────────────
