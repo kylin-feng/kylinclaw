@@ -1,5 +1,9 @@
-# Embedded Python runtime (too large for git, download via setup.bat)
+# Embedded Python runtime and compiled exe (too large for git)
 python/
+KylinClaw.exe
+build/
+dist/
+*.spec
 
 # Python artifacts
 __pycache__/
