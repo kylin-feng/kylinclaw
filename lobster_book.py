@@ -21,6 +21,59 @@ try:
 except ImportError:
     HAS_PDF = False
 
+# ── Database ──────────────────────────────────────────────────────────────────
+try:
+    import pymysql
+    HAS_DB = True
+except ImportError:
+    HAS_DB = False
+
+DB_CONFIG = dict(
+    host="106.53.86.215", port=3306,
+    user="root", password="Ffqm110013!@#",
+    database="lobster_book", charset="utf8mb4",
+    connect_timeout=8,
+)
+
+WECHAT_CONTACT = "13342491933"
+
+def db_verify_code(code: str, book_id: int) -> tuple[bool, str]:
+    """
+    验证激活码。返回 (success, message)。
+    book_id=0 表示任意书籍均可。
+    """
+    if not HAS_DB:
+        return False, "数据库模块未加载"
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT book_id, used FROM activation_codes WHERE code=%s",
+            (code.strip().upper(),)
+        )
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return False, "激活码无效"
+        db_book_id, used = row
+        if used:
+            conn.close()
+            return False, "该激活码已被使用"
+        # book_id=0 的码可解锁任意书；特定 book_id 的码只能解锁对应书
+        if db_book_id != 0 and db_book_id != book_id:
+            conn.close()
+            return False, "该激活码不适用于此书籍"
+        # 标记为已用
+        cur.execute(
+            "UPDATE activation_codes SET used=1, used_at=NOW() WHERE code=%s",
+            (code.strip().upper(),)
+        )
+        conn.commit()
+        conn.close()
+        return True, "激活成功"
+    except Exception as e:
+        return False, f"网络错误: {e}"
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(ROOT, "lobster_data.json")
 
@@ -94,6 +147,18 @@ def llm_stream(api_key, base_url, model, messages, on_chunk, on_done, on_error):
                 except Exception:
                     pass
         on_done()
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            pass
+        if e.code == 401:
+            on_error("401 未认证 — 请在「设置」中检查 API Key 是否正确")
+        elif e.code == 429:
+            on_error("429 请求过频 — 请稍后重试")
+        else:
+            on_error(f"HTTP {e.code}: {body[:120]}")
     except Exception as e:
         on_error(str(e))
 
@@ -661,8 +726,9 @@ class LobsterBookApp(tk.Tk):
     def _open_book(self, book):
         win = tk.Toplevel(self)
         win.title(book["title"])
-        win.geometry("620x520")
+        win.geometry("640x560")
         win.configure(bg=BG)
+        win.resizable(False, False)
 
         tk.Label(win, text=book["title"], font=("Segoe UI", 14, "bold"),
                  bg=BG, fg=FG).pack(pady=(16, 2))
@@ -678,29 +744,75 @@ class LobsterBookApp(tk.Tk):
         purchased = book["id"] in self.data.get("purchased", [])
 
         if book["free"] or purchased:
-            txt.insert("end", "[完整内容]\n\n这里是书籍的完整正文内容……\n\n（示例：连接后端后可获取真实内容）")
+            txt.insert("end", "─" * 40 + "\n【完整正文】\n\n"
+                       "这里是书籍的完整正文内容……\n\n"
+                       "（书籍已解锁，连接后端后可获取真实内容）")
             txt.configure(state="disabled")
         else:
-            txt.insert("end", "\n\n" + "█" * 30 + "\n\n内容已锁定，付费后可阅读全文。")
+            txt.insert("end", "\n\n" + "▓" * 28 + "\n\n  内容已加密锁定\n  输入激活码后解锁全文")
             txt.configure(state="disabled")
-            btm = tk.Frame(win, bg=BG)
-            btm.pack(fill="x", padx=20, pady=10)
-            tk.Button(btm, text=f"确认付费解锁  ¥{book['price']}",
-                      font=SANS_B, bg=ACCENT, fg="#fff",
-                      activebackground="#c0392b", relief="flat",
-                      cursor="hand2", pady=8,
-                      command=lambda: self._purchase(book, win)).pack(fill="x")
+            self._build_unlock_panel(win, book)
 
-    def _purchase(self, book, win):
-        ans = messagebox.askyesno("确认付费",
-            f"确认支付 ¥{book['price']} 解锁《{book['title']}》完整版？\n（演示模式：直接解锁，不扣费）")
-        if ans:
-            if "purchased" not in self.data:
-                self.data["purchased"] = []
-            self.data["purchased"].append(book["id"])
-            save_data(self.data)
-            win.destroy()
-            messagebox.showinfo("解锁成功", f"《{book['title']}》已解锁，请重新打开阅读。")
+    def _build_unlock_panel(self, win, book):
+        panel = tk.Frame(win, bg=PANEL)
+        panel.pack(fill="x", padx=20, pady=(8, 16))
+
+        # 微信获取激活码提示
+        tip = tk.Frame(panel, bg="#1e2d1e")
+        tip.pack(fill="x", pady=(10, 8))
+        tk.Label(tip, text="获取激活码方式", font=SANS_B,
+                 bg="#1e2d1e", fg=GREEN).pack(anchor="w", padx=10, pady=(8, 2))
+        tk.Label(tip,
+                 text=f"添加微信  {WECHAT_CONTACT}  →  备注「龙虾写书」→ 获取激活码",
+                 font=("Segoe UI", 10), bg="#1e2d1e", fg=FG).pack(anchor="w", padx=10)
+        tk.Label(tip, text=f"书籍定价  ¥{book['price']}",
+                 font=SANS, bg="#1e2d1e", fg=ACCENT2).pack(anchor="w", padx=10, pady=(0, 8))
+
+        # 激活码输入
+        row = tk.Frame(panel, bg=PANEL)
+        row.pack(fill="x", pady=(4, 10))
+        tk.Label(row, text="激活码：", font=SANS, bg=PANEL, fg=FG2).pack(side="left", padx=(10, 4))
+        code_var = tk.StringVar()
+        code_entry = tk.Entry(row, textvariable=code_var, font=("Consolas", 11),
+                              bg=BG, fg=FG, insertbackground=FG, relief="flat",
+                              width=22)
+        code_entry.pack(side="left", ipady=4)
+        code_entry.focus_set()
+
+        msg_lbl = tk.Label(panel, text="", font=("Segoe UI", 9), bg=PANEL)
+        msg_lbl.pack(anchor="w", padx=10)
+
+        def do_activate():
+            code = code_var.get().strip()
+            if not code:
+                msg_lbl.config(text="请输入激活码", fg=ACCENT)
+                return
+            btn.config(state="disabled", text="验证中...")
+            msg_lbl.config(text="正在连接服务器...", fg=FG2)
+
+            def verify():
+                ok, msg = db_verify_code(code, book["id"])
+                def update():
+                    btn.config(state="normal", text="立即激活")
+                    if ok:
+                        if "purchased" not in self.data:
+                            self.data["purchased"] = []
+                        self.data["purchased"].append(book["id"])
+                        save_data(self.data)
+                        win.destroy()
+                        messagebox.showinfo("解锁成功",
+                            f"《{book['title']}》已解锁！\n重新点击书籍即可阅读完整内容。")
+                    else:
+                        msg_lbl.config(text=f"✗  {msg}", fg=ACCENT)
+                self.after(0, update)
+            threading.Thread(target=verify, daemon=True).start()
+
+        btn = tk.Button(row, text="立即激活", font=SANS_B,
+                        bg=ACCENT, fg="#fff", activebackground="#c0392b",
+                        relief="flat", cursor="hand2", padx=14, pady=4,
+                        command=do_activate)
+        btn.pack(side="left", padx=8)
+        win.bind("<Return>", lambda e: do_activate())
 
     # ── Settings dialog ───────────────────────────────────────────────
 
