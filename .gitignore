@@ -1,0 +1,15 @@
+# Embedded Python runtime (too large for git, download via setup.bat)
+python/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
