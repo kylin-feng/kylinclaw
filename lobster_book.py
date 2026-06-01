@@ -1176,62 +1176,108 @@ class LobsterBookApp(tk.Tk):
             row_i, col_i = divmod(idx, COLS)
             enabled = skill.get("enabled", False)
             cat_color = SKILL_CATS.get(skill.get("cat", ""), FG2)
-            card_bg = "#1e2a1e" if enabled else CARD
+            card_bg = "#1a2e1a" if enabled else CARD
 
             card = tk.Frame(self._skills_inner, bg=card_bg, padx=0, pady=0)
             card.grid(row=row_i, column=col_i, padx=6, pady=6, sticky="nsew")
             self._skills_inner.columnconfigure(col_i, weight=1)
 
-            # Color top bar
-            tk.Frame(card, bg=cat_color, height=3).pack(fill="x")
+            # Color top bar (enabled → green, else cat color)
+            bar_color = "#3a6e3a" if enabled else cat_color
+            tk.Frame(card, bg=bar_color, height=3).pack(fill="x")
 
             body = tk.Frame(card, bg=card_bg, padx=12, pady=8)
             body.pack(fill="both", expand=True)
 
-            # Top row: category tag + checkbox
+            # Top row: category tag + status badge
             top_row = tk.Frame(body, bg=card_bg)
             top_row.pack(fill="x")
             tk.Label(top_row, text=skill.get("cat", ""),
                      font=("Segoe UI", 7, "bold"), bg=cat_color,
                      fg="#fff", padx=5, pady=1).pack(side="left")
-
-            var = tk.BooleanVar(value=enabled)
-            self._skill_vars[skill["id"]] = var
-            cb = tk.Checkbutton(top_row, variable=var, bg=card_bg,
-                                activebackground=card_bg, selectcolor=BG,
-                                cursor="hand2",
-                                command=lambda sid=skill["id"], v=var, c=card:
-                                    self._toggle_skill(sid, v, c))
-            cb.pack(side="right")
+            if enabled:
+                tk.Label(top_row, text="已加载", font=("Segoe UI", 7, "bold"),
+                         bg="#3a6e3a", fg="#a6e3a1",
+                         padx=5, pady=1).pack(side="right")
 
             # Skill name
+            name_color = GREEN if enabled else FG
             tk.Label(body, text=skill["name"], font=("Segoe UI", 11, "bold"),
-                     bg=card_bg,
-                     fg=cat_color if enabled else FG).pack(anchor="w", pady=(4, 2))
+                     bg=card_bg, fg=name_color).pack(anchor="w", pady=(6, 2))
 
-            # Description (user-friendly, no prompt shown)
-            desc = skill.get("desc", "")
-            tk.Label(body, text=desc, font=("Segoe UI", 8),
+            # Description
+            tk.Label(body, text=skill.get("desc", ""), font=("Segoe UI", 8),
                      bg=card_bg, fg=FG2, wraplength=180,
                      justify="left").pack(anchor="w")
 
-            # Click card to toggle
-            for w in [card, body]:
-                w.bind("<Button-1>", lambda e, sid=skill["id"], v=var, c=card:
-                       (v.set(not v.get()), self._toggle_skill(sid, v, c)))
+            # Action button row
+            btn_row = tk.Frame(body, bg=card_bg)
+            btn_row.pack(fill="x", pady=(8, 2))
 
-    def _toggle_skill(self, sid, var, card=None):
-        enabled = var.get()
+            if enabled:
+                # 已加载 → 显示取消按钮
+                tk.Button(btn_row, text="✕  取消加载",
+                          font=("Segoe UI", 8), bg="#3a2020", fg="#f38ba8",
+                          activebackground=ACCENT, activeforeground="#fff",
+                          relief="flat", cursor="hand2", padx=8, pady=3,
+                          command=lambda sid=skill["id"]: self._disable_skill(sid)
+                          ).pack(side="left")
+            else:
+                # 未加载 → 显示加载按钮
+                tk.Button(btn_row, text="＋  加载技能",
+                          font=("Segoe UI", 8, "bold"), bg=cat_color, fg="#fff",
+                          activebackground="#fff", activeforeground=cat_color,
+                          relief="flat", cursor="hand2", padx=8, pady=3,
+                          command=lambda sid=skill["id"], nm=skill["name"],
+                                         dc=skill.get("desc", ""), cc=cat_color:
+                              self._confirm_enable_skill(sid, nm, dc, cc)
+                          ).pack(side="left")
+
+    def _confirm_enable_skill(self, sid, name, desc, cat_color):
+        """弹出确认对话框，用户确认后加载技能。"""
+        win = tk.Toplevel(self)
+        win.title("加载技能")
+        win.geometry("340x180")
+        win.configure(bg=PANEL)
+        win.resizable(False, False)
+        win.grab_set()
+
+        tk.Label(win, text=f"加载技能：{name}", font=("Segoe UI", 12, "bold"),
+                 bg=PANEL, fg=FG).pack(pady=(18, 4))
+        tk.Label(win, text=desc, font=SANS, bg=PANEL, fg=FG2,
+                 wraplength=290).pack(padx=20)
+        tk.Label(win, text="加载后写书时将自动应用此技能。",
+                 font=("Segoe UI", 8), bg=PANEL, fg=FG2).pack(pady=(6, 0))
+
+        btn_row = tk.Frame(win, bg=PANEL)
+        btn_row.pack(pady=16)
+        tk.Button(btn_row, text="取消", font=SANS, bg=CARD, fg=FG2,
+                  relief="flat", cursor="hand2", padx=16, pady=5,
+                  command=win.destroy).pack(side="left", padx=6)
+        tk.Button(btn_row, text="确认加载", font=SANS_B,
+                  bg=cat_color, fg="#fff",
+                  activebackground="#fff", activeforeground=cat_color,
+                  relief="flat", cursor="hand2", padx=16, pady=5,
+                  command=lambda: self._enable_skill(sid, win)
+                  ).pack(side="left", padx=6)
+
+    def _enable_skill(self, sid, win=None):
         for s in self.data["skills"]:
             if s["id"] == sid:
-                s["enabled"] = enabled
+                s["enabled"] = True
         save_data(self.data)
-        # Update card color live
-        if card:
-            new_bg = "#1e2a1e" if enabled else CARD
-            _repaint_card(card, new_bg)
-        # Refresh active count badge if exists
+        if win:
+            win.destroy()
         self._update_active_count()
+        self._render_skill_cards(self._cat_filter.get())
+
+    def _disable_skill(self, sid):
+        for s in self.data["skills"]:
+            if s["id"] == sid:
+                s["enabled"] = False
+        save_data(self.data)
+        self._update_active_count()
+        self._render_skill_cards(self._cat_filter.get())
 
     def _update_active_count(self):
         active = sum(1 for s in self.data.get("skills", []) if s.get("enabled"))
