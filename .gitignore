@@ -18,3 +18,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+obf_dist/
+*.bug.log
