@@ -1,3 +1,3 @@
 @echo off
 chcp 65001 >nul
-"%~dp0python\python.exe"
+cmd /k "%~dp0python\python.exe"
