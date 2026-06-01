@@ -251,91 +251,11 @@ class LobsterBookApp(tk.Tk):
         self.w_preview.tag_config("chapter", foreground=ACCENT2,
                                   font=("Segoe UI", 11, "bold"))
 
-    def _start_writing(self):
-        if self._writing:
-            return
-        if not self.data["api_key"]:
-            messagebox.showwarning("提示", "请先在「设置」中填写 API Key")
-            return
+    # ── Thread-safe UI helpers ────────────────────────────────────────
 
-        title   = self.w_title.get().strip() or "未命名书籍"
-        genre   = self.w_genre.get()
-        n_chap  = int(self.w_chapters.get())
-        style   = self.w_style.get()
-        brief   = self.w_brief.get("1.0", "end").strip()
-        self._book_text = f"# {title}\n\n"
-        self._writing = True
-        self.w_start_btn.config(state="disabled", text="写作中...")
-        self.w_export_btn.config(state="disabled")
-        self._set_preview("")
-        self._preview_append(f"《{title}》\n\n", "chapter")
-
-        def run():
-            system_prompt = (
-                f"你是一位专业作家，擅长写{genre}类书籍，风格{style}。"
-                "每章内容详实，约800-1200字，结构清晰。用中文写作。"
-            )
-            outline_prompt = (
-                f"为书籍《{title}》设计{n_chap}章的大纲，每章给出章节名和100字摘要。"
-                + (f"\n参考方向：{brief}" if brief else "")
-                + "\n仅输出章节列表，格式：第N章 章节名：摘要"
-            )
-            # Step 1: generate outline
-            self._set_status("生成大纲...")
-            outline_text = []
-            def on_chunk(c): outline_text.append(c)
-            def on_done(): pass
-            def on_error(e): self._set_status(f"错误: {e}")
-            ev = threading.Event()
-            def done_ev(): ev.set()
-            llm_stream(
-                self.data["api_key"], self.data["base_url"], self.data["model"],
-                [{"role": "system", "content": system_prompt},
-                 {"role": "user", "content": outline_prompt}],
-                on_chunk, done_ev, on_error
-            )
-            # fallback sync — stream ran synchronously above
-            outline = "".join(outline_text)
-            self._book_text += f"## 大纲\n\n{outline}\n\n"
-            self._preview_append("【大纲】\n" + outline + "\n\n", "chapter")
-            self.w_progress_var.set(10)
-
-            # Step 2: write each chapter
-            chapters = [l.strip() for l in outline.split("\n") if l.strip().startswith("第") and "章" in l]
-            if not chapters:
-                chapters = [f"第{i+1}章" for i in range(n_chap)]
-
-            for i, chap_line in enumerate(chapters[:n_chap]):
-                chap_name = chap_line.split("：")[0].split(":")[0].strip()
-                self._set_status(f"正在写 {chap_name}...")
-                self._preview_append(f"\n\n{'─'*40}\n{chap_name}\n{'─'*40}\n\n", "chapter")
-
-                chap_text = []
-                ev2 = threading.Event()
-
-                def _chunk(c, store=chap_text): store.append(c); self._preview_append(c)
-                def _done(ev=ev2): ev.set()
-                def _err(e): self._set_status(f"错误: {e}"); ev2.set()
-
-                llm_stream(
-                    self.data["api_key"], self.data["base_url"], self.data["model"],
-                    [{"role": "system", "content": system_prompt},
-                     {"role": "user", "content":
-                      f"书名：《{title}》\n大纲：{outline}\n\n请完整写出「{chap_name}」的全部正文内容，约1000字，不要再列大纲。"}],
-                    _chunk, _done, _err
-                )
-                ev2.wait()
-                self._book_text += f"\n\n## {chap_name}\n\n{''.join(chap_text)}"
-                progress = 10 + int(90 * (i + 1) / len(chapters[:n_chap]))
-                self.w_progress_var.set(progress)
-                time.sleep(0.3)
-
-            self._writing = False
-            self._set_status("写作完成 ✓")
-            self.w_start_btn.config(state="normal", text="▶  开始写书")
-            self.w_export_btn.config(state="normal")
-
-        threading.Thread(target=run, daemon=True).start()
+    def _ui(self, fn):
+        """Schedule fn() on the main thread (safe to call from any thread)."""
+        self.after(0, fn)
 
     def _set_preview(self, text):
         self.w_preview.configure(state="normal")
@@ -352,6 +272,129 @@ class LobsterBookApp(tk.Tk):
 
     def _set_status(self, text):
         self.w_status_lbl.config(text=text)
+
+    def _set_progress(self, val):
+        self.w_progress_var.set(val)
+
+    # ── Writing logic ─────────────────────────────────────────────────
+
+    def _start_writing(self):
+        if self._writing:
+            return
+        if not self.data["api_key"]:
+            messagebox.showwarning("提示", "请先在「设置」中填写 API Key")
+            return
+
+        title  = self.w_title.get().strip() or "未命名书籍"
+        genre  = self.w_genre.get()
+        n_chap = int(self.w_chapters.get())
+        style  = self.w_style.get()
+        brief  = self.w_brief.get("1.0", "end").strip()
+
+        self._book_text = f"# {title}\n\n"
+        self._writing = True
+        self.w_start_btn.config(state="disabled", text="写作中...")
+        self.w_export_btn.config(state="disabled")
+        self._set_preview("")
+        self._preview_append(f"《{title}》\n\n", "chapter")
+
+        def run():
+            try:
+                system_prompt = (
+                    f"你是一位专业作家，擅长写{genre}类书籍，风格{style}。"
+                    "每章内容详实，约800-1200字，结构清晰。用中文写作。"
+                )
+
+                # ── Step 1: 生成大纲 ──────────────────────────────
+                self._ui(lambda: self._set_status("正在生成大纲..."))
+                outline_prompt = (
+                    f"为书籍《{title}》设计{n_chap}章的大纲，每章给出章节名和100字摘要。"
+                    + (f"\n参考方向：{brief}" if brief else "")
+                    + "\n仅输出章节列表，格式：第N章 章节名：摘要"
+                )
+                outline_parts = []
+                error_box = [None]
+
+                def _outline_chunk(c):
+                    outline_parts.append(c)
+                    self._ui(lambda c=c: self._preview_append(c))
+
+                def _outline_err(e):
+                    error_box[0] = e
+
+                llm_stream(
+                    self.data["api_key"], self.data["base_url"], self.data["model"],
+                    [{"role": "system", "content": system_prompt},
+                     {"role": "user",   "content": outline_prompt}],
+                    _outline_chunk, lambda: None, _outline_err
+                )
+
+                if error_box[0]:
+                    self._ui(lambda e=error_box[0]: self._set_status(f"错误: {e}"))
+                    self._ui(lambda: self.w_start_btn.config(state="normal", text="▶  开始写书"))
+                    self._writing = False
+                    return
+
+                outline = "".join(outline_parts)
+                self._book_text += f"## 大纲\n\n{outline}\n\n"
+                self._ui(lambda: self._set_progress(10))
+
+                # ── Step 2: 逐章写作 ──────────────────────────────
+                chapters = [
+                    l.strip() for l in outline.split("\n")
+                    if l.strip() and l.strip()[0] in "第123456789" and "章" in l
+                ]
+                if not chapters:
+                    chapters = [f"第{i+1}章" for i in range(n_chap)]
+
+                total = len(chapters[:n_chap])
+                for i, chap_line in enumerate(chapters[:n_chap]):
+                    chap_name = chap_line.split("：")[0].split(":")[0].strip()
+                    sep = "─" * 38
+                    self._ui(lambda s=sep, cn=chap_name:
+                             self._preview_append(f"\n\n{s}\n{cn}\n{s}\n\n", "chapter"))
+                    self._ui(lambda cn=chap_name: self._set_status(f"正在写 {cn}..."))
+
+                    chap_parts = []
+                    chap_error = [None]
+
+                    def _chap_chunk(c, store=chap_parts):
+                        store.append(c)
+                        self._ui(lambda c=c: self._preview_append(c))
+
+                    def _chap_err(e, eb=chap_error):
+                        eb[0] = e
+
+                    llm_stream(
+                        self.data["api_key"], self.data["base_url"], self.data["model"],
+                        [{"role": "system", "content": system_prompt},
+                         {"role": "user",   "content":
+                          f"书名：《{title}》\n大纲：{outline}\n\n"
+                          f"请完整写出「{chap_name}」的全部正文内容，约1000字，只写正文不要重复列大纲。"}],
+                        _chap_chunk, lambda: None, _chap_err
+                    )
+
+                    if chap_error[0]:
+                        self._ui(lambda e=chap_error[0]: self._set_status(f"章节错误: {e}"))
+                        break
+
+                    self._book_text += f"\n\n## {chap_name}\n\n{''.join(chap_parts)}"
+                    prog = 10 + int(90 * (i + 1) / total)
+                    self._ui(lambda p=prog: self._set_progress(p))
+
+                # ── 完成 ──────────────────────────────────────────
+                self._writing = False
+                self._ui(lambda: self._set_status("写作完成 ✓"))
+                self._ui(lambda: self._set_progress(100))
+                self._ui(lambda: self.w_start_btn.config(state="normal", text="▶  开始写书"))
+                self._ui(lambda: self.w_export_btn.config(state="normal"))
+
+            except Exception as e:
+                self._writing = False
+                self._ui(lambda e=e: self._set_status(f"异常: {e}"))
+                self._ui(lambda: self.w_start_btn.config(state="normal", text="▶  开始写书"))
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _export_pdf(self):
         if not self._book_text.strip():
@@ -540,17 +583,18 @@ class LobsterBookApp(tk.Tk):
     def _trigger_task(self, task):
         task["status"] = "运行中"
         save_data(self.data)
-        self._refresh_task_tree()
-        # Switch to write tab and auto-fill
-        self._show_page("write")
-        self.w_title.delete(0, "end")
-        self.w_title.insert(0, task["title"])
-        self._start_writing()
-        task["status"] = "完成"
-        if task["repeat"] == "仅一次":
-            task["enabled"] = False
-        save_data(self.data)
-        self._refresh_task_tree()
+        def _do():
+            self._refresh_task_tree()
+            self._show_page("write")
+            self.w_title.delete(0, "end")
+            self.w_title.insert(0, task["title"])
+            self._start_writing()
+            task["status"] = "完成"
+            if task["repeat"] == "仅一次":
+                task["enabled"] = False
+            save_data(self.data)
+            self._refresh_task_tree()
+        self.after(0, _do)
 
     # ── Page: Plaza ───────────────────────────────────────────────────
 
