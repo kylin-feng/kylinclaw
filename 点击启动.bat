@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0KylinClaw.exe"
+start "" "%~dp0龙虾写书.exe"

@@ -1,6 +1,7 @@
 # Embedded Python runtime and compiled exe (too large for git)
 python/
 KylinClaw.exe
+龙虾写书.exe
 build/
 dist/
 *.spec
