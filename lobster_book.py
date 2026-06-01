@@ -523,45 +523,378 @@ class LobsterBookApp(tk.Tk):
         if not HAS_PDF:
             messagebox.showerror("错误", "PDF 导出模块未安装 (fpdf2)")
             return
+        self._show_export_dialog()
+
+    # ── Export dialog ─────────────────────────────────────────────────
+
+    PDF_STYLES = {
+        "简约白": {
+            "cover_bg": (255, 255, 255), "cover_fg": (20, 20, 30),
+            "accent": (220, 80, 50),     "body_bg": (255, 255, 255),
+            "body_fg": (30, 30, 30),     "chapter_fg": (200, 70, 40),
+        },
+        "商务深": {
+            "cover_bg": (18, 24, 52),    "cover_fg": (240, 240, 255),
+            "accent": (100, 140, 255),   "body_bg": (255, 255, 255),
+            "body_fg": (20, 20, 40),     "chapter_fg": (60, 100, 200),
+        },
+        "暖 橙": {
+            "cover_bg": (220, 80, 40),   "cover_fg": (255, 245, 235),
+            "accent": (255, 200, 60),    "body_bg": (255, 255, 255),
+            "body_fg": (40, 20, 10),     "chapter_fg": (200, 70, 30),
+        },
+        "松 绿": {
+            "cover_bg": (28, 72, 58),    "cover_fg": (230, 255, 240),
+            "accent": (90, 210, 140),    "body_bg": (255, 255, 255),
+            "body_fg": (20, 40, 30),     "chapter_fg": (30, 130, 90),
+        },
+        "学术灰": {
+            "cover_bg": (55, 58, 68),    "cover_fg": (240, 240, 245),
+            "accent": (180, 180, 210),   "body_bg": (255, 255, 255),
+            "body_fg": (30, 30, 35),     "chapter_fg": (80, 80, 110),
+        },
+    }
+
+    def _show_export_dialog(self):
+        win = tk.Toplevel(self)
+        win.title("导出书籍 PDF")
+        win.geometry("720x620")
+        win.configure(bg=BG)
+        win.resizable(False, False)
+        win.grab_set()
+
+        title = self.w_title.get().strip() or "未命名书籍"
+        self._export_style = tk.StringVar(value="商务深")
+
+        # ── Header ───────────────────────────────────────────────────
+        tk.Label(win, text=f"导出《{title}》", font=("Segoe UI", 13, "bold"),
+                 bg=BG, fg=FG).pack(anchor="w", padx=20, pady=(16, 4))
+
+        # ── Style picker ──────────────────────────────────────────────
+        style_frame = tk.Frame(win, bg=PANEL)
+        style_frame.pack(fill="x", padx=20, pady=(0, 8))
+        tk.Label(style_frame, text="封面风格", font=SANS_B,
+                 bg=PANEL, fg=FG2).pack(anchor="w", padx=12, pady=(8, 4))
+        btn_row = tk.Frame(style_frame, bg=PANEL)
+        btn_row.pack(anchor="w", padx=12, pady=(0, 10))
+        self._style_btns = {}
+        for name, st in self.PDF_STYLES.items():
+            bg_hex = "#{:02x}{:02x}{:02x}".format(*st["cover_bg"])
+            fg_hex = "#{:02x}{:02x}{:02x}".format(*st["cover_fg"])
+            ac_hex = "#{:02x}{:02x}{:02x}".format(*st["accent"])
+            btn = tk.Button(btn_row, text=name, font=("Segoe UI", 9, "bold"),
+                            bg=bg_hex, fg=fg_hex,
+                            activebackground=ac_hex, activeforeground=fg_hex,
+                            relief="flat", cursor="hand2", padx=14, pady=8,
+                            command=lambda n=name: self._select_style(n))
+            btn.pack(side="left", padx=3)
+            self._style_btns[name] = btn
+        self._select_style("商务深")
+
+        # ── Book info ─────────────────────────────────────────────────
+        info_frame = tk.Frame(win, bg=PANEL)
+        info_frame.pack(fill="x", padx=20, pady=(0, 8))
+
+        def info_row(parent, label, default="", show=None):
+            row = tk.Frame(parent, bg=PANEL)
+            row.pack(fill="x", padx=12, pady=3)
+            tk.Label(row, text=label, font=SANS, bg=PANEL, fg=FG2,
+                     width=6, anchor="e").pack(side="left", padx=(0, 8))
+            e = tk.Entry(row, font=SANS, bg=BG, fg=FG, insertbackground=FG,
+                         relief="flat", show=show)
+            e.pack(side="left", fill="x", expand=True, ipady=4)
+            e.insert(0, default)
+            return e
+
+        tk.Label(info_frame, text="书籍信息", font=SANS_B,
+                 bg=PANEL, fg=FG2).pack(anchor="w", padx=12, pady=(8, 2))
+        self.exp_author   = info_row(info_frame, "作者", "龙虾写书")
+        self.exp_subtitle = info_row(info_frame, "副标题", "")
+        tk.Frame(info_frame, bg=BG, height=6).pack()
+
+        # ── Preface + Postscript ──────────────────────────────────────
+        mid = tk.Frame(win, bg=BG)
+        mid.pack(fill="both", expand=True, padx=20, pady=(0, 8))
+        mid.columnconfigure(0, weight=1)
+        mid.columnconfigure(1, weight=1)
+
+        def section(parent, col, label, attr):
+            f = tk.Frame(parent, bg=PANEL)
+            f.grid(row=0, column=col, sticky="nsew", padx=(0 if col else 0, 6 if col==0 else 0))
+            hdr = tk.Frame(f, bg=PANEL)
+            hdr.pack(fill="x", padx=10, pady=(8, 2))
+            tk.Label(hdr, text=label, font=SANS_B, bg=PANEL, fg=FG2).pack(side="left")
+            tk.Button(hdr, text="AI生成", font=("Segoe UI", 8),
+                      bg=ACCENT, fg="#fff", activebackground="#c0392b",
+                      relief="flat", cursor="hand2", padx=6, pady=2,
+                      command=lambda a=attr, lbl=label: self._ai_gen_section(a, lbl, title)
+                      ).pack(side="right")
+            txt = tk.Text(f, font=("Segoe UI", 9), bg=BG, fg=FG,
+                          insertbackground=FG, relief="flat", wrap="word", height=7)
+            txt.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            setattr(self, attr, txt)
+
+        section(mid, 0, "前  言", "exp_preface")
+        section(mid, 1, "后  记", "exp_postscript")
+
+        # ── Back cover text ───────────────────────────────────────────
+        back_frame = tk.Frame(win, bg=PANEL)
+        back_frame.pack(fill="x", padx=20, pady=(0, 10))
+        tk.Label(back_frame, text="封底简介（可选）", font=SANS_B,
+                 bg=PANEL, fg=FG2).pack(anchor="w", padx=12, pady=(8, 2))
+        self.exp_backcover = tk.Entry(back_frame, font=SANS, bg=BG, fg=FG,
+                                      insertbackground=FG, relief="flat")
+        self.exp_backcover.pack(fill="x", padx=12, pady=(0, 10), ipady=4)
+        self.exp_backcover.insert(0, "本书由 AI 自主创作，龙虾写书出品")
+
+        # ── Buttons ───────────────────────────────────────────────────
+        btn_bar = tk.Frame(win, bg=BG)
+        btn_bar.pack(fill="x", padx=20, pady=(0, 14))
+        tk.Button(btn_bar, text="取消", font=SANS, bg=CARD, fg=FG2,
+                  relief="flat", cursor="hand2", padx=16, pady=6,
+                  command=win.destroy).pack(side="right", padx=4)
+        tk.Button(btn_bar, text="📄  导出 PDF", font=SANS_B,
+                  bg=ACCENT, fg="#fff", activebackground="#c0392b",
+                  relief="flat", cursor="hand2", padx=20, pady=6,
+                  command=lambda: self._do_export(win, title)).pack(side="right")
+
+    def _select_style(self, name):
+        self._export_style.set(name)
+        for n, btn in self._style_btns.items():
+            st = self.PDF_STYLES[n]
+            bg_hex = "#{:02x}{:02x}{:02x}".format(*st["cover_bg"])
+            fg_hex = "#{:02x}{:02x}{:02x}".format(*st["cover_fg"])
+            if n == name:
+                btn.config(relief="solid", bd=2)
+            else:
+                btn.config(relief="flat", bd=0)
+
+    def _ai_gen_section(self, attr, label, title):
+        if not self.data["api_key"]:
+            messagebox.showwarning("提示", "请先在「设置」中填写 API Key")
+            return
+        widget = getattr(self, attr)
+        widget.delete("1.0", "end")
+        widget.insert("1.0", "AI生成中…")
+
+        is_preface = "前" in label
+        prompt = (
+            f"为书籍《{title}》写一段{'前言' if is_preface else '后记'}，"
+            f"约200字，{'介绍本书的写作背景、目的和读者收益' if is_preface else '总结写作感悟、致谢和展望'}，"
+            "语言真诚自然，不要太正式。"
+        )
+        def gen():
+            try:
+                text = llm_call(
+                    self.data["api_key"], self.data["base_url"], self.data["model"],
+                    [{"role": "user", "content": prompt}], timeout=30
+                )
+                def update():
+                    widget.delete("1.0", "end")
+                    widget.insert("1.0", text)
+                self.after(0, update)
+            except Exception as e:
+                self.after(0, lambda: widget.delete("1.0", "end"))
+                self.after(0, lambda: widget.insert("1.0", f"生成失败: {e}"))
+        threading.Thread(target=gen, daemon=True).start()
+
+    def _do_export(self, win, title):
         path = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             filetypes=[("PDF 文件", "*.pdf")],
-            initialfile=self.w_title.get().strip() or "我的书籍"
+            initialfile=title,
+            parent=win,
         )
         if not path:
             return
-        try:
-            pdf = FPDF()
-            pdf.set_auto_page_break(auto=True, margin=20)
-            font_path = os.path.join(ROOT, "assets", "NotoSansSC-Regular.ttf")
-            if os.path.exists(font_path):
-                pdf.add_font("NotoSans", "", font_path)
-                font_name = "NotoSans"
-            else:
-                font_name = "Helvetica"
 
-            for line in self._book_text.split("\n"):
-                if line.startswith("# "):
-                    pdf.add_page()
-                    pdf.set_font(font_name, size=22)
-                    pdf.cell(0, 14, line[2:], ln=True, align="C")
-                    pdf.ln(6)
-                elif line.startswith("## "):
-                    pdf.add_page()
-                    pdf.set_font(font_name, size=16)
-                    pdf.cell(0, 10, line[3:], ln=True)
-                    pdf.ln(4)
+        style_name = self._export_style.get()
+        st = self.PDF_STYLES[style_name]
+        author    = self.exp_author.get().strip() or "龙虾写书"
+        subtitle  = self.exp_subtitle.get().strip()
+        preface   = self.exp_preface.get("1.0", "end").strip()
+        postscript= self.exp_postscript.get("1.0", "end").strip()
+        back_text = self.exp_backcover.get().strip()
+        book_text = self._book_text
+
+        win.destroy()
+
+        def build():
+            try:
+                # ── 加载中文字体 ──────────────────────────────────────
+                font_candidates = [
+                    r"C:\Windows\Fonts\simhei.ttf",
+                    r"C:\Windows\Fonts\simsun.ttc",
+                    r"C:\Windows\Fonts\msyh.ttc",
+                ]
+                font_path = next((p for p in font_candidates if os.path.exists(p)), None)
+
+                pdf = FPDF(orientation="P", unit="mm", format="A4")
+                pdf.set_auto_page_break(auto=True, margin=22)
+
+                if font_path:
+                    pdf.add_font("CN", "", font_path)
+                    fn = "CN"
                 else:
-                    pdf.set_font(font_name, size=11)
-                    if line.strip():
-                        pdf.multi_cell(0, 7, line)
-                    else:
-                        pdf.ln(3)
+                    fn = "Helvetica"
 
-            pdf.output(path)
-            messagebox.showinfo("导出成功", f"PDF 已保存至：\n{path}")
-        except Exception as e:
-            messagebox.showerror("导出失败", str(e))
+                W, H = 210, 297
+
+                def r(rgb): return rgb  # alias
+
+                # ── 封面 ──────────────────────────────────────────────
+                pdf.add_page()
+                cbg = st["cover_bg"]
+                pdf.set_fill_color(*cbg)
+                pdf.rect(0, 0, W, H, "F")
+
+                # accent bar left
+                ac = st["accent"]
+                pdf.set_fill_color(*ac)
+                pdf.rect(0, 0, 12, H, "F")
+
+                # title
+                cfg = st["cover_fg"]
+                pdf.set_text_color(*cfg)
+                pdf.set_font(fn, size=36)
+                pdf.set_xy(22, H * 0.28)
+                pdf.multi_cell(W - 34, 14, title, align="L")
+
+                # subtitle
+                if subtitle:
+                    pdf.set_font(fn, size=14)
+                    pdf.set_text_color(*ac)
+                    pdf.set_x(22)
+                    pdf.cell(0, 10, subtitle, ln=True)
+
+                # divider line
+                pdf.set_draw_color(*ac)
+                pdf.set_line_width(0.8)
+                y_line = pdf.get_y() + 6
+                pdf.line(22, y_line, W - 22, y_line)
+
+                # author
+                pdf.set_font(fn, size=13)
+                pdf.set_text_color(*cfg)
+                pdf.set_xy(22, y_line + 8)
+                pdf.cell(0, 8, f"作者：{author}", ln=True)
+
+                # brand bottom
+                pdf.set_font(fn, size=9)
+                pdf.set_text_color(*[c//2 + 80 for c in cbg])
+                pdf.set_xy(22, H - 20)
+                pdf.cell(0, 6, "龙虾写书  ·  AI 自主创作", ln=True)
+
+                # ── 版权页 ────────────────────────────────────────────
+                pdf.add_page()
+                pdf.set_text_color(80, 80, 90)
+                pdf.set_font(fn, size=10)
+                pdf.set_xy(25, 40)
+                pdf.multi_cell(W - 50, 7,
+                    f"书名：{title}\n作者：{author}\n"
+                    f"{"副标题：" + subtitle + chr(10) if subtitle else ""}"
+                    f"出版：龙虾写书\n\n"
+                    "本书由 AI 自主创作完成。\n版权所有，未经授权不得转载。",
+                    align="L"
+                )
+
+                # ── 前言 ──────────────────────────────────────────────
+                if preface:
+                    pdf.add_page()
+                    _chapter_header(pdf, fn, st, W, "前  言")
+                    pdf.set_font(fn, size=11)
+                    pdf.set_text_color(*st["body_fg"])
+                    pdf.set_x(25)
+                    pdf.multi_cell(W - 50, 7, preface)
+
+                # ── 目录 ──────────────────────────────────────────────
+                chapters_list = [
+                    l.strip() for l in book_text.split("\n")
+                    if l.startswith("## ") and not l.startswith("## 大纲")
+                ]
+                if chapters_list:
+                    pdf.add_page()
+                    _chapter_header(pdf, fn, st, W, "目  录")
+                    pdf.set_font(fn, size=11)
+                    pdf.set_text_color(*st["body_fg"])
+                    for i, ch in enumerate(chapters_list, 1):
+                        name = ch[3:].strip()
+                        pdf.set_x(25)
+                        pdf.cell(W - 50, 8, f"{i}.  {name}", ln=True)
+
+                # ── 正文各章 ──────────────────────────────────────────
+                lines = book_text.split("\n")
+                skip_outline = False
+                for line in lines:
+                    if line.startswith("# "):
+                        continue  # 封面已有标题
+                    if line.startswith("## 大纲"):
+                        skip_outline = True
+                        continue
+                    if skip_outline and line.startswith("## "):
+                        skip_outline = False
+                    if skip_outline:
+                        continue
+                    if line.startswith("## "):
+                        pdf.add_page()
+                        _chapter_header(pdf, fn, st, W, line[3:].strip())
+                    else:
+                        pdf.set_font(fn, size=11)
+                        pdf.set_text_color(*st["body_fg"])
+                        if line.strip():
+                            pdf.set_x(25)
+                            pdf.multi_cell(W - 50, 7, line.strip())
+                        else:
+                            pdf.ln(3)
+
+                # ── 后记 ──────────────────────────────────────────────
+                if postscript:
+                    pdf.add_page()
+                    _chapter_header(pdf, fn, st, W, "后  记")
+                    pdf.set_font(fn, size=11)
+                    pdf.set_text_color(*st["body_fg"])
+                    pdf.set_x(25)
+                    pdf.multi_cell(W - 50, 7, postscript)
+
+                # ── 封底 ──────────────────────────────────────────────
+                pdf.add_page()
+                pdf.set_fill_color(*st["cover_bg"])
+                pdf.rect(0, 0, W, H, "F")
+                pdf.set_fill_color(*st["accent"])
+                pdf.rect(W - 12, 0, 12, H, "F")
+
+                if back_text:
+                    pdf.set_font(fn, size=12)
+                    pdf.set_text_color(*st["cover_fg"])
+                    pdf.set_xy(22, H * 0.4)
+                    pdf.multi_cell(W - 46, 8, back_text, align="L")
+
+                pdf.set_font(fn, size=10)
+                pdf.set_text_color(*st["accent"])
+                pdf.set_xy(22, H - 24)
+                pdf.cell(0, 6, f"《{title}》  ·  {author}", ln=True)
+
+                pdf.output(path)
+                self.after(0, lambda: messagebox.showinfo("导出成功", f"PDF 已保存至：\n{path}"))
+            except Exception as e:
+                self.after(0, lambda e=e: messagebox.showerror("导出失败", str(e)))
+
+        threading.Thread(target=build, daemon=True).start()
+
+
+def _chapter_header(pdf, fn, st, W, text):
+    """渲染章节标题页眉样式。"""
+    ac = st["accent"]
+    pdf.set_fill_color(*ac)
+    pdf.rect(0, 0, 8, 40, "F")
+    pdf.set_font(fn, size=18)
+    pdf.set_text_color(*st["chapter_fg"])
+    pdf.set_xy(16, 14)
+    pdf.cell(0, 10, text, ln=True)
+    pdf.set_draw_color(*ac)
+    pdf.set_line_width(0.4)
+    pdf.line(16, 28, W - 20, 28)
+    pdf.ln(8)
 
     # ── Page: Tasks (NLP input) ───────────────────────────────────────
 
